@@ -114,28 +114,6 @@ function textoSincronizacao(info) {
   } catch { return ""; }
 }
 
-async function abrirServicos() {
-  atual = null;
-  for (const id of ["msgs", "envio", "falhas"]) $(id).classList.add("oculto");
-  $("servicos").classList.remove("oculto");
-  $("topo").replaceChildren(el("strong", {}, "Serviços (espelho do Minha Agenda)"));
-  const [servicos, infos] = await Promise.all([
-    sb.from("salao_servicos").select("nome, preco, duracao, categoria, ativo").order("ordem").order("nome"),
-    sb.from("salao_info").select("chave, valor"),
-  ]);
-  if (servicos.error) return alert(servicos.error.message);
-  const info = Object.fromEntries((infos.data || []).map((x) => [x.chave, x.valor]));
-  const cols = ["nome", "preco", "duracao", "categoria"];
-  const tabela = el("table", {},
-    el("tr", {}, ...["Serviço", "Preço", "Duração", "Categoria"].map((c) => el("th", {}, c))),
-    ...servicos.data.filter((s) => s.ativo).map((s) => el("tr", {}, ...cols.map((c) => el("td", {}, s[c] ?? "")))));
-  $("servicos").replaceChildren(
-    el("p", {}, textoSincronizacao(info)),
-    info.horario_funcionamento ? el("p", {}, "Horário: " + info.horario_funcionamento) : null,
-    el("p", {}, "Para mudar serviço, preço ou horário, altere no Minha Agenda. O bot atualiza sozinho uma vez por dia."),
-    tabela);
-}
-$("btnServicos").onclick = abrirServicos;
 
 $("login").onsubmit = async (e) => {
   e.preventDefault();
@@ -151,7 +129,5 @@ sb.auth.onAuthStateChange((_ev, sessao) => {
   $("app").classList.toggle("oculto", !logado);
   $("btnSair").classList.toggle("oculto", !logado);
   $("btnFalhas").classList.toggle("oculto", !logado);
-  $("btnServicos").classList.toggle("oculto", !logado);
-  clearInterval(timer);
-  if (logado) { carregarLista(); timer = setInterval(() => { carregarLista(); carregarMsgs(); }, 15000); }
+  clearInterval(timer);  if (logado) { carregarLista(); timer = setInterval(() => { carregarLista(); carregarMsgs(); }, 15000); }
 });
