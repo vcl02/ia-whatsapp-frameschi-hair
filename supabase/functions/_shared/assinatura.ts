@@ -3,7 +3,10 @@
 
 const encoder = new TextEncoder();
 
-async function hmacHex(segredo: string, corpo: Uint8Array<ArrayBuffer>): Promise<string> {
+async function hmacHex(
+  segredo: string,
+  corpo: Uint8Array<ArrayBuffer>,
+): Promise<string> {
   const chave = await crypto.subtle.importKey(
     "raw",
     encoder.encode(segredo),
@@ -11,8 +14,12 @@ async function hmacHex(segredo: string, corpo: Uint8Array<ArrayBuffer>): Promise
     false,
     ["sign"],
   );
-  const assinatura = new Uint8Array(await crypto.subtle.sign("HMAC", chave, corpo));
-  return Array.from(assinatura, (b) => b.toString(16).padStart(2, "0")).join("");
+  const assinatura = new Uint8Array(
+    await crypto.subtle.sign("HMAC", chave, corpo),
+  );
+  return Array.from(assinatura, (b) => b.toString(16).padStart(2, "0")).join(
+    "",
+  );
 }
 
 function iguaisTempoConstante(a: string, b: string): boolean {

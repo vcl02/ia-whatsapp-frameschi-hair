@@ -198,8 +198,7 @@ $("btnFalhas").onclick = async () => {
   );
 };
 
-// Serviços: espelho do Minha Agenda (só leitura). Para mudar, altere no Minha Agenda;
-// a sincronização diária traz a mudança para cá.
+// Serviços: espelho do Minha Agenda (só leitura). Para mudar, altere no Minha Agenda; a sincronização diária traz a mudança para cá.
 function textoSincronizacao(info) {
   try {
     const u = JSON.parse(info.ultima_sincronizacao || "null");

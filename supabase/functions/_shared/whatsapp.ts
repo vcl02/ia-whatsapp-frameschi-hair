@@ -38,7 +38,7 @@ export interface EventosWebhook {
 }
 
 type Obj = Record<string, unknown>;
-const obj = (v: unknown): Obj => (v && typeof v === "object" ? v as Obj : {});
+const obj = (v: unknown): Obj => (v && typeof v === "object" ? (v as Obj) : {});
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
 
@@ -62,8 +62,16 @@ function textoDaMensagem(m: Obj): string | null {
   }
 }
 
-export function lerEventos(payload: unknown, phoneNumberId: string): EventosWebhook {
-  const out: EventosWebhook = { mensagens: [], statuses: [], ecos: [], ignorados: 0 };
+export function lerEventos(
+  payload: unknown,
+  phoneNumberId: string,
+): EventosWebhook {
+  const out: EventosWebhook = {
+    mensagens: [],
+    statuses: [],
+    ecos: [],
+    ignorados: 0,
+  };
   for (const entry of arr(obj(payload).entry)) {
     for (const change of arr(obj(entry).changes)) {
       const c = obj(change);
@@ -161,12 +169,21 @@ async function postar(
       Authorization: `Bearer ${cfg.token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", ...corpoMsg }),
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      ...corpoMsg,
+    }),
   });
   const corpo = obj(await resp.json().catch(() => ({})));
   const wamid = str(obj(arr(corpo.messages)[0]).id);
   // Atenção: 200 aqui só significa "aceito". A entrega real vem nos statuses.
-  return { ok: resp.ok && !!wamid, wamid, httpStatus: resp.status, erro: corpo.error ?? null };
+  return {
+    ok: resp.ok && !!wamid,
+    wamid,
+    httpStatus: resp.status,
+    erro: corpo.error ?? null,
+  };
 }
 
 export function enviarTexto(
@@ -175,7 +192,11 @@ export function enviarTexto(
   texto: string,
   fetchFn: typeof fetch = fetch,
 ): Promise<ResultadoEnvio> {
-  return postar(cfg, { to: para, type: "text", text: { preview_url: false, body: texto } }, fetchFn);
+  return postar(
+    cfg,
+    { to: para, type: "text", text: { preview_url: false, body: texto } },
+    fetchFn,
+  );
 }
 
 /** Modelo (template) aprovado na Meta, com parâmetros só no corpo. */
@@ -187,17 +208,26 @@ export function enviarModelo(
   parametros: string[],
   fetchFn: typeof fetch = fetch,
 ): Promise<ResultadoEnvio> {
-  return postar(cfg, {
-    to: para,
-    type: "template",
-    template: {
-      name: nome,
-      language: { code: idioma },
-      components: parametros.length
-        ? [{ type: "body", parameters: parametros.map((t) => ({ type: "text", text: t })) }]
-        : [],
+  return postar(
+    cfg,
+    {
+      to: para,
+      type: "template",
+      template: {
+        name: nome,
+        language: { code: idioma },
+        components: parametros.length
+          ? [
+              {
+                type: "body",
+                parameters: parametros.map((t) => ({ type: "text", text: t })),
+              },
+            ]
+          : [],
+      },
     },
-  }, fetchFn);
+    fetchFn,
+  );
 }
 
 /**
@@ -205,10 +235,18 @@ export function enviarModelo(
  * Vazia = responde todo mundo.
  */
 export function lerPermitidos(valor: string | undefined): Set<string> {
-  return new Set((valor ?? "").split(",").map((s) => s.replace(/\D/g, "")).filter(Boolean));
+  return new Set(
+    (valor ?? "")
+      .split(",")
+      .map((s) => s.replace(/\D/g, ""))
+      .filter(Boolean),
+  );
 }
 
-export function botPodeResponder(permitidos: Set<string>, waId: string): boolean {
+export function botPodeResponder(
+  permitidos: Set<string>,
+  waId: string,
+): boolean {
   return permitidos.size === 0 || permitidos.has(waId);
 }
 
@@ -216,7 +254,10 @@ export function botPodeResponder(permitidos: Set<string>, waId: string): boolean
  * Remove tudo que envolve números fora da lista (mensagens, ecos e statuses).
  * Lista vazia = mantém tudo.
  */
-export function filtrarPorPermitidos(ev: EventosWebhook, permitidos: Set<string>): { eventos: EventosWebhook; descartados: number } {
+export function filtrarPorPermitidos(
+  ev: EventosWebhook,
+  permitidos: Set<string>,
+): { eventos: EventosWebhook; descartados: number } {
   const ok = (n: string | null) => botPodeResponder(permitidos, n ?? "");
   const eventos: EventosWebhook = {
     mensagens: ev.mensagens.filter((m) => ok(m.waId)),
@@ -224,13 +265,21 @@ export function filtrarPorPermitidos(ev: EventosWebhook, permitidos: Set<string>
     ecos: ev.ecos.filter((e) => ok(e.para)),
     ignorados: ev.ignorados,
   };
-  const descartados = ev.mensagens.length + ev.statuses.length + ev.ecos.length -
+  const descartados =
+    ev.mensagens.length +
+    ev.statuses.length +
+    ev.ecos.length -
     (eventos.mensagens.length + eventos.statuses.length + eventos.ecos.length);
   return { eventos, descartados };
 }
 
 export const JANELA_24H_MS = 24 * 60 * 60 * 1000;
 
-export function dentroDaJanela(ultimoInbound: Date | null, agora = new Date()): boolean {
-  return !!ultimoInbound && agora.getTime() - ultimoInbound.getTime() < JANELA_24H_MS;
+export function dentroDaJanela(
+  ultimoInbound: Date | null,
+  agora = new Date(),
+): boolean {
+  return (
+    !!ultimoInbound && agora.getTime() - ultimoInbound.getTime() < JANELA_24H_MS
+  );
 }

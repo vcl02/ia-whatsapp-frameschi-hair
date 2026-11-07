@@ -1,15 +1,34 @@
 // Webhook da WhatsApp Cloud API (bot do salão).
 // GET  -> verificação (hub.challenge)
-// POST -> valida X-Hub-Signature-256, grava mensagens, ecos e statuses,
-//         responde 200 e processa a resposta do bot em segundo plano.
+// POST -> valida X-Hub-Signature-256, grava mensagens, ecos e statuses, responde 200 e processa a resposta do bot em segundo plano.
 
 import { assinaturaValida } from "../_shared/assinatura.ts";
-import { enviarTexto, filtrarPorPermitidos, lerEventos, lerPermitidos, type ConfigWhatsApp } from "../_shared/whatsapp.ts";
-import { ArmazemSessaoSupabase, clienteServico, exigirEnv, RepositorioPropostasSupabase, RepositorioSupabase } from "../_shared/db.ts";
+import {
+  enviarTexto,
+  filtrarPorPermitidos,
+  lerEventos,
+  lerPermitidos,
+  type ConfigWhatsApp,
+} from "../_shared/whatsapp.ts";
+import {
+  ArmazemSessaoSupabase,
+  clienteServico,
+  exigirEnv,
+  RepositorioPropostasSupabase,
+  RepositorioSupabase,
+} from "../_shared/db.ts";
 import { ConsultaMinhaAgenda } from "../_shared/disponibilidade.ts";
-import { AgendadorMinhaAgenda, montarFerramentas } from "../_shared/agendamento.ts";
+import {
+  AgendadorMinhaAgenda,
+  montarFerramentas,
+} from "../_shared/agendamento.ts";
 import { processarMensagem, type DepsBot } from "../_shared/bot.ts";
-import { avisarEquipe, enviarEmailResend, enviarResumo, lerConfigAviso } from "../_shared/aviso.ts";
+import {
+  avisarEquipe,
+  enviarEmailResend,
+  enviarResumo,
+  lerConfigAviso,
+} from "../_shared/aviso.ts";
 import { AtendenteClaude } from "../_shared/llm.ts";
 import { SALAO } from "../_shared/salao.ts";
 
@@ -30,16 +49,25 @@ export async function tratar(req: Request): Promise<Response> {
   const url = new URL(req.url);
 
   if (req.method === "GET") {
-    const ok = url.searchParams.get("hub.mode") === "subscribe" &&
-      url.searchParams.get("hub.verify_token") === exigirEnv("SALAO_WHATSAPP_VERIFY_TOKEN");
+    const ok =
+      url.searchParams.get("hub.mode") === "subscribe" &&
+      url.searchParams.get("hub.verify_token") ===
+        exigirEnv("SALAO_WHATSAPP_VERIFY_TOKEN");
     return ok
-      ? new Response(url.searchParams.get("hub.challenge") ?? "", { status: 200 })
+      ? new Response(url.searchParams.get("hub.challenge") ?? "", {
+          status: 200,
+        })
       : new Response("forbidden", { status: 403 });
   }
-  if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
+  if (req.method !== "POST")
+    return new Response("method not allowed", { status: 405 });
 
   const corpo = new Uint8Array(await req.arrayBuffer());
-  const valida = await assinaturaValida(corpo, req.headers.get("x-hub-signature-256"), exigirEnv("SALAO_META_APP_SECRET"));
+  const valida = await assinaturaValida(
+    corpo,
+    req.headers.get("x-hub-signature-256"),
+    exigirEnv("SALAO_META_APP_SECRET"),
+  );
   if (!valida) {
     log("assinatura_invalida");
     return new Response("invalid signature", { status: 401 });
@@ -68,13 +96,17 @@ export async function tratar(req: Request): Promise<Response> {
   // Consulta e agendamento no Minha Agenda: só ligam com a chave do Firebase configurada.
   // O agendamento pode ser desligado à parte com SALAO_AGENDAR=nao.
   const chaveFirebase = Deno.env.get("SALAO_MA_FIREBASE_KEY");
-  const consulta = chaveFirebase ? new ConsultaMinhaAgenda(chaveFirebase, new ArmazemSessaoSupabase(db)) : null;
-  const agendarLigado = !!chaveFirebase && Deno.env.get("SALAO_AGENDAR") !== "nao";
+  const consulta = chaveFirebase
+    ? new ConsultaMinhaAgenda(chaveFirebase, new ArmazemSessaoSupabase(db))
+    : null;
+  const agendarLigado =
+    !!chaveFirebase && Deno.env.get("SALAO_AGENDAR") !== "nao";
   const aviso = lerConfigAviso((n) => Deno.env.get(n));
 
   for (const s of eventos.statuses) {
     await repo.registrarStatus(s);
-    if (s.status === "failed") log("status_falha", { wamid: s.wamid, erros: s.erros });
+    if (s.status === "failed")
+      log("status_falha", { wamid: s.wamid, erros: s.erros });
   }
   for (const e of eventos.ecos) await repo.registrarEco(e);
 
@@ -83,17 +115,34 @@ export async function tratar(req: Request): Promise<Response> {
     atendente: new AtendenteClaude(exigirEnv("SALAO_ANTHROPIC_API_KEY")),
     salao: SALAO,
     enviar: (para, texto) => enviarTexto(wa, para, texto),
-    avisar: (c, motivo) => avisarEquipe(aviso, { enviarEmail: (cfg, e) => enviarEmailResend(cfg, e), log }, c, motivo),
+    avisar: (c, motivo) =>
+      avisarEquipe(
+        aviso,
+        { enviarEmail: (cfg, e) => enviarEmailResend(cfg, e), log },
+        c,
+        motivo,
+      ),
     esperar: (ms) => new Promise((r) => setTimeout(r, ms)),
     ferramentas: consulta
-      ? (ctx) => montarFerramentas(ctx, {
-        consulta,
-        agendador: agendarLigado ? new AgendadorMinhaAgenda(chaveFirebase!) : undefined,
-        propostas: agendarLigado ? new RepositorioPropostasSupabase(db) : undefined,
-        avisar: (assunto, texto) => enviarResumo(aviso, { enviarEmail: (cfg, e) => enviarEmailResend(cfg, e), log }, assunto, texto),
-        log,
-        maxDias: 15, // o agendamento online abre até 15 dias à frente (Minha Agenda)
-      })
+      ? (ctx) =>
+          montarFerramentas(ctx, {
+            consulta,
+            agendador: agendarLigado
+              ? new AgendadorMinhaAgenda(chaveFirebase!)
+              : undefined,
+            propostas: agendarLigado
+              ? new RepositorioPropostasSupabase(db)
+              : undefined,
+            avisar: (assunto, texto) =>
+              enviarResumo(
+                aviso,
+                { enviarEmail: (cfg, e) => enviarEmailResend(cfg, e), log },
+                assunto,
+                texto,
+              ),
+            log,
+            maxDias: 15, // o agendamento online abre até 15 dias à frente (Minha Agenda)
+          })
       : undefined,
     log,
   };
@@ -102,7 +151,9 @@ export async function tratar(req: Request): Promise<Response> {
     const { conversaId, nova } = await repo.registrarEntrada(m);
     if (!nova) continue; // reenvio da Meta: já tratado
     emSegundoPlano(
-      processarMensagem(deps, conversaId, m).then((r) => log("processado", { conversa: conversaId, resultado: r })),
+      processarMensagem(deps, conversaId, m).then((r) =>
+        log("processado", { conversa: conversaId, resultado: r }),
+      ),
     );
   }
 
@@ -115,4 +166,3 @@ export async function tratar(req: Request): Promise<Response> {
   });
   return new Response("ok", { status: 200 });
 }
-

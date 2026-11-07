@@ -18,12 +18,12 @@ export interface DadosSalao {
   linkAgendamento: string | null;
   endereco: string | null;
   horarioFuncionamento: string | null; // espelhado do Minha Agenda (salao_info); este é só o valor inicial
-  regrasAgendamento: string | null;    // espelhado do Minha Agenda: antecedência, cancelamento, atraso
-  formasPagamento: string | null;   // opcional
-  equipe: string | null;            // quem faz o quê
+  regrasAgendamento: string | null; // espelhado do Minha Agenda: antecedência, cancelamento, atraso
+  formasPagamento: string | null; // opcional
+  equipe: string | null; // quem faz o quê
   tom: string | null;
   // Textos fixos com variações: o bot sorteia um, para não soar repetitivo.
-  mensagensApresentacao: string[];  // vai antes da primeira resposta de cada conversa
+  mensagensApresentacao: string[]; // vai antes da primeira resposta de cada conversa
   mensagensPassagemHumano: string[];
 }
 
@@ -35,11 +35,13 @@ export const SALAO: DadosSalao = {
   // Confirmado pelo usuário em 2026-11-06.
   endereco: "Rua Ettore Andreazza, 691 - Jardim Tietê, São Paulo - SP",
   // Valor inicial, igual ao Minha Agenda em 2026-11-07. A sincronização diária sobrescreve.
-  horarioFuncionamento: "terça a sábado, das 8h às 12h e das 13h às 19h. Fechado: segunda e domingo.",
+  horarioFuncionamento:
+    "terça a sábado, das 8h às 12h e das 13h às 19h. Fechado: segunda e domingo.",
   regrasAgendamento: null,
   formasPagamento: null,
   // Informado pelo usuário em 2026-11-07.
-  equipe: "Alessandra faz manicure e pedicure (unhas). A Bruna faz cabelo, massagem e todos os outros serviços.",
+  equipe:
+    "Alessandra faz manicure e pedicure (unhas). A Bruna faz cabelo, massagem e todos os outros serviços.",
   tom: "carinhoso, acolhedor e próximo, como uma pessoa do salão conversando no WhatsApp; nada formal",
   mensagensApresentacao: [
     "Oii! Aqui é a assistente virtual da Bruna Frameschi Hair 💖 Sou um atendimento automático e, se precisar, chamo a Bruna pra você.",
@@ -54,7 +56,10 @@ export const SALAO: DadosSalao = {
 };
 
 /** Aplica o que veio do Minha Agenda (tabela salao_info) sobre os dados fixos. */
-export function comInfoEspelhada(d: DadosSalao, info: Record<string, string>): DadosSalao {
+export function comInfoEspelhada(
+  d: DadosSalao,
+  info: Record<string, string>,
+): DadosSalao {
   return {
     ...d,
     horarioFuncionamento: info.horario_funcionamento || d.horarioFuncionamento,
@@ -70,6 +75,7 @@ export function camposFaltando(d: DadosSalao, servicos: Servico[]): string[] {
   if (!d.endereco) faltando.push("endereco");
   if (!d.horarioFuncionamento) faltando.push("horarioFuncionamento");
   if (!d.tom) faltando.push("tom");
-  if (servicos.length === 0) faltando.push("servicos (tabela salao_servicos vazia)");
+  if (servicos.length === 0)
+    faltando.push("servicos (tabela salao_servicos vazia)");
   return faltando;
 }

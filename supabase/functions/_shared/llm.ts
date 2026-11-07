@@ -7,7 +7,12 @@ import type { Ferramentas } from "./agendamento.ts";
 
 export const MODELO = "claude-sonnet-5-5";
 
-export type Intencao = "duvida" | "agendar" | "remarcar_ou_cancelar" | "reclamacao" | "outro";
+export type Intencao =
+  | "duvida"
+  | "agendar"
+  | "remarcar_ou_cancelar"
+  | "reclamacao"
+  | "outro";
 
 export interface DecisaoLLM {
   resposta: string;
@@ -30,7 +35,12 @@ export interface OpcoesResposta {
 
 /** Interface para permitir testes sem chamar a API. */
 export interface Atendente {
-  responder(historico: ItemHistorico[], servicos: Servico[], salao: DadosSalao, opcoes?: OpcoesResposta): Promise<DecisaoLLM>;
+  responder(
+    historico: ItemHistorico[],
+    servicos: Servico[],
+    salao: DadosSalao,
+    opcoes?: OpcoesResposta,
+  ): Promise<DecisaoLLM>;
 }
 
 const MAX_RODADAS_FERRAMENTA = 4;
@@ -43,7 +53,13 @@ const SCHEMA = {
     motivo: { type: "string" },
     intencao: {
       type: "string",
-      enum: ["duvida", "agendar", "remarcar_ou_cancelar", "reclamacao", "outro"],
+      enum: [
+        "duvida",
+        "agendar",
+        "remarcar_ou_cancelar",
+        "reclamacao",
+        "outro",
+      ],
     },
   },
   required: ["resposta", "passar_para_humano", "motivo", "intencao"],
@@ -52,10 +68,11 @@ const SCHEMA = {
 
 export function montarSistema(d: DadosSalao, lista: Servico[]): string {
   const servicos = lista
-    .map((s) =>
-      `- ${s.nome}${s.origem_id ? ` [id ${s.origem_id}]` : ""}: ${s.preco}` +
-      (s.duracao ? ` (duração: ${s.duracao})` : "") +
-      (s.observacao ? ` — ${s.observacao}` : "")
+    .map(
+      (s) =>
+        `- ${s.nome}${s.origem_id ? ` [id ${s.origem_id}]` : ""}: ${s.preco}` +
+        (s.duracao ? ` (duração: ${s.duracao})` : "") +
+        (s.observacao ? ` — ${s.observacao}` : ""),
     )
     .join("\n");
   return `Você atende pelo WhatsApp as clientes do ${d.nomeSalao}, em nome de ${d.nomeAtendente}.
@@ -100,17 +117,29 @@ Saída: preencha "resposta" com a mensagem a enviar à cliente, "passar_para_hum
 
 /** Data e hora atuais em São Paulo, por extenso. Ex.: "sexta-feira, 06/11/2026, 21:10". */
 export function agoraEmSaoPaulo(agora: Date = new Date()): string {
-  const dia = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long" }).format(agora);
+  const dia = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    weekday: "long",
+  }).format(agora);
   const data = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric",
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
   }).format(agora);
   const hora = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit", hour12: false,
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
   }).format(agora);
   return `${dia}, ${data}, ${hora}`;
 }
 
-export function blocoContexto(agora: Date, nomeCliente: string | null | undefined): string {
+export function blocoContexto(
+  agora: Date,
+  nomeCliente: string | null | undefined,
+): string {
   const nome = nomeCliente?.trim()
     ? `Nome da cliente no perfil do WhatsApp: ${nomeCliente.trim()}.`
     : "A cliente não tem nome no perfil do WhatsApp: pergunte o nome antes de propor um agendamento.";
@@ -122,11 +151,14 @@ export function blocoAgora(agora: Date = new Date()): string {
 }
 
 /** Converte o histórico em mensagens alternadas user/assistant, terminando em user. */
-export function montarMensagens(historico: ItemHistorico[]): Array<{ role: "user" | "assistant"; content: string }> {
+export function montarMensagens(
+  historico: ItemHistorico[],
+): Array<{ role: "user" | "assistant"; content: string }> {
   const msgs: Array<{ role: "user" | "assistant"; content: string }> = [];
   for (const item of historico) {
     const role = item.autor === "cliente" ? "user" : "assistant";
-    const texto = item.autor === "humano" ? `[Atendente humana] ${item.texto}` : item.texto;
+    const texto =
+      item.autor === "humano" ? `[Atendente humana] ${item.texto}` : item.texto;
     const ultima = msgs[msgs.length - 1];
     if (ultima && ultima.role === role) ultima.content += `\n${texto}`;
     else msgs.push({ role, content: texto });
@@ -144,8 +176,10 @@ export function validarDecisao(bruto: unknown): DecisaoLLM | null {
     typeof d.resposta !== "string" ||
     typeof d.passar_para_humano !== "boolean" ||
     typeof d.motivo !== "string" ||
-    typeof d.intencao !== "string" || !intencoes.includes(d.intencao)
-  ) return null;
+    typeof d.intencao !== "string" ||
+    !intencoes.includes(d.intencao)
+  )
+    return null;
   return d as unknown as DecisaoLLM;
 }
 
@@ -153,13 +187,24 @@ export class FalhaLLM extends Error {}
 
 /** Só o pedaço do SDK que usamos (permite cliente falso nos testes). */
 export interface ClienteMensagens {
-  beta: { messages: { create(p: Anthropic.Beta.Messages.MessageCreateParamsNonStreaming): Promise<Anthropic.Beta.Messages.BetaMessage> } };
+  beta: {
+    messages: {
+      create(
+        p: Anthropic.Beta.Messages.MessageCreateParamsNonStreaming,
+      ): Promise<Anthropic.Beta.Messages.BetaMessage>;
+    };
+  };
 }
 
 export class AtendenteClaude implements Atendente {
   private client: ClienteMensagens;
-  constructor(apiKey: string, private relogio: () => Date = () => new Date(), cliente?: ClienteMensagens) {
-    this.client = cliente ?? new Anthropic({ apiKey, timeout: 60_000, maxRetries: 1 });
+  constructor(
+    apiKey: string,
+    private relogio: () => Date = () => new Date(),
+    cliente?: ClienteMensagens,
+  ) {
+    this.client =
+      cliente ?? new Anthropic({ apiKey, timeout: 60_000, maxRetries: 1 });
   }
 
   async responder(
@@ -169,11 +214,17 @@ export class AtendenteClaude implements Atendente {
     opcoes: OpcoesResposta = {},
   ): Promise<DecisaoLLM> {
     const { ferramentas, nomeCliente } = opcoes;
-    const messages: Anthropic.Beta.Messages.BetaMessageParam[] = montarMensagens(historico);
-    if (messages.length === 0) throw new FalhaLLM("histórico sem mensagem da cliente");
+    const messages: Anthropic.Beta.Messages.BetaMessageParam[] =
+      montarMensagens(historico);
+    if (messages.length === 0)
+      throw new FalhaLLM("histórico sem mensagem da cliente");
     // Parte fixa primeiro (com cache) e o contexto que muda (hora, nome) por último.
     const system: Anthropic.Beta.Messages.BetaTextBlockParam[] = [
-      { type: "text", text: montarSistema(salao, servicos), cache_control: { type: "ephemeral" } },
+      {
+        type: "text",
+        text: montarSistema(salao, servicos),
+        cache_control: { type: "ephemeral" },
+      },
       { type: "text", text: blocoContexto(this.relogio(), nomeCliente) },
     ];
     for (let rodada = 0; rodada <= MAX_RODADAS_FERRAMENTA; rodada++) {
@@ -186,20 +237,36 @@ export class AtendenteClaude implements Atendente {
           effort: "medium",
           format: { type: "json_schema", schema: SCHEMA },
         },
-        ...(ferramentas?.definicoes.length ? { tools: ferramentas.definicoes } : {}),
+        ...(ferramentas?.definicoes.length
+          ? { tools: ferramentas.definicoes }
+          : {}),
         system,
         messages,
       });
-      if (resp.stop_reason === "tool_use" && ferramentas && rodada < MAX_RODADAS_FERRAMENTA) {
-        const resultados: Anthropic.Beta.Messages.BetaToolResultBlockParam[] = [];
+      if (
+        resp.stop_reason === "tool_use" &&
+        ferramentas &&
+        rodada < MAX_RODADAS_FERRAMENTA
+      ) {
+        const resultados: Anthropic.Beta.Messages.BetaToolResultBlockParam[] =
+          [];
         for (const bloco of resp.content) {
           if (bloco.type !== "tool_use") continue;
-          const entrada = (bloco.input && typeof bloco.input === "object" ? bloco.input : {}) as Record<string, unknown>;
+          const entrada = (
+            bloco.input && typeof bloco.input === "object" ? bloco.input : {}
+          ) as Record<string, unknown>;
           const conteudo = await ferramentas.executar(bloco.name, entrada);
-          resultados.push({ type: "tool_result", tool_use_id: bloco.id, content: conteudo });
+          resultados.push({
+            type: "tool_result",
+            tool_use_id: bloco.id,
+            content: conteudo,
+          });
         }
         // Devolve o turno do modelo sem alterar (inclui blocos de raciocínio) + os resultados.
-        messages.push({ role: "assistant", content: resp.content }, { role: "user", content: resultados });
+        messages.push(
+          { role: "assistant", content: resp.content },
+          { role: "user", content: resultados },
+        );
         continue;
       }
       return interpretar(resp);
