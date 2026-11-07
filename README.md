@@ -22,7 +22,7 @@ supabase/
   tests/                      testes Deno (sem rede, sem banco)
   config.toml                 verify_jwt por função
 web/                          tela de conversas e de serviços/preços (estática)
-                              publicada em https://vcl02.github.io/ia-bruna/painel/
+                              publicada em https://vcl02.github.io/ia-whatsapp-frameschi-hair/painel/
 site/                         política de privacidade (GitHub Pages, workflow em .github/workflows/pages.yml)
 docs/                         decisões, diagnóstico dos modelos, pendências, deploy
 ```
@@ -45,7 +45,7 @@ docs/                         decisões, diagnóstico dos modelos, pendências, 
    conversa pausa sozinho (evento `smb_message_echoes`; formato não conferido).
 5. A tela usa login do Supabase Auth; só quem está em `salao_equipe` vê
    algo (RLS). Responder pela tela pausa o bot da conversa. A aba Serviços
-   edita preços sem deploy.
+   mostra o espelho do Minha Agenda (só leitura).
 6. Conversas paradas há 12 meses são apagadas todo dia (pg_cron).
 
 ## Desenvolvimento
