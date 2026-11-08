@@ -209,6 +209,10 @@
         border-radius: 999px;
         padding: 1px 9px;
       }
+      .card h2 .contagem.ok {
+        color: var(--ok);
+        background: var(--ok-soft);
+      }
       .card h2 .contagem.aviso {
         color: var(--bad);
         background: var(--bad-soft);
@@ -538,7 +542,7 @@
       <section class="numeros" id="numeros"></section>
 
       <section class="card">
-        <h2>Conversas <span id="conversasN" class="contagem"></span><span id="pausadasN" class="contagem aviso"></span></h2>
+        <h2>Conversas <span id="conversasN" class="contagem"></span><span id="ativasN" class="contagem ok"></span><span id="pausadasN" class="contagem aviso"></span></h2>
         <div id="conversas" class="lista"></div>
       </section>
 

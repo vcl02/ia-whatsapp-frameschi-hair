@@ -138,6 +138,8 @@ async function carregarConversas() {
   if (error) return falha(error);
   const pausadas = data.filter((c) => c.bot_pausado).length;
   $("conversasN").textContent = data.length ? `${data.length} ${data.length === 1 ? "conversa" : "conversas"}` : "";
+  const ativas = data.length - pausadas;
+  $("ativasN").textContent = ativas ? `${ativas} ${ativas === 1 ? "ativa" : "ativas"}` : "";
   $("pausadasN").textContent = pausadas ? `${pausadas} ${pausadas === 1 ? "pausada" : "pausadas"}` : "";
   $("conversas").replaceChildren(
     ...(data.length
