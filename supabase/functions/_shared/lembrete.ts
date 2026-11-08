@@ -1,6 +1,7 @@
 // Lembrete a cada 7 minutos, enquanto a cliente ainda não mandou o comprovante do Pix.
 // Roda pela função salao-lembrete (pg_cron, a cada minuto). Os textos são fixos (sem IA).
-// A proposta vale 30 min: lembretes aos 7, 14, 21 e 28 minutos, no máximo 4.
+// A proposta vale 30 min: lembretes aos 7, 14, 21 e 28 minutos, no máximo 4. Quando a
+// reserva vence sem comprovante, um último aviso diz que o horário não foi agendado.
 
 import { dataCurta, sinalDoServico } from "./agendamento.ts";
 import type { ResultadoEnvio } from "./whatsapp.ts";
@@ -24,10 +25,13 @@ export interface PropostaParaLembrete {
 }
 
 export interface RepositorioLembretes {
-  /** Propostas com status "proposto", dentro do prazo e com menos de MAX_LEMBRETES lembretes. */
+  /** Propostas com status "proposto" (no prazo ou vencidas há pouco). */
   listar(): Promise<PropostaParaLembrete[]>;
-  /** Marca o lembrete como enviado (antes de enviar). false = outra execução já pegou. */
-  reservar(id: string, atual: number): Promise<boolean>;
+  /**
+   * Marca o envio (antes de enviar). `expirar` também muda o status para "expirado".
+   * false = outra execução já pegou.
+   */
+  reservar(id: string, atual: number, expirar?: boolean): Promise<boolean>;
 }
 
 /** Já passou a hora do próximo lembrete? Conversa com a IA pausada não recebe. */
@@ -38,6 +42,16 @@ export function lembreteDevido(p: PropostaParaLembrete, agora: number): boolean 
     p.expiraEm > agora &&
     agora >= p.criadoEm + (p.lembretes + 1) * INTERVALO_LEMBRETE_MS
   );
+}
+
+/** A reserva venceu sem comprovante e a cliente ainda não foi avisada? */
+export function expiracaoDevida(p: PropostaParaLembrete, agora: number): boolean {
+  return !p.botPausado && p.expiraEm <= agora;
+}
+
+export function textoExpiracao(p: PropostaParaLembrete): string {
+  const servico = p.servicoNome.replace(/\s*\(a partir de\)/i, "");
+  return `${p.nomeCliente}, o tempo da reserva do horário (${servico}, ${dataCurta(p.data)}, às ${p.hora}) acabou e, como não recebi o comprovante do Pix, ele não foi agendado. 💖 Se ainda quiser, é só me avisar que eu vejo os horários de novo.`;
 }
 
 export function textoLembrete(p: PropostaParaLembrete, agora: number): string {
@@ -72,13 +86,14 @@ export async function enviarLembretes(deps: DepsLembretes): Promise<number> {
   const agora = (deps.agora ?? Date.now)();
   let enviados = 0;
   for (const p of await deps.repo.listar()) {
-    if (!lembreteDevido(p, agora)) continue;
-    if (!(await deps.repo.reservar(p.id, p.lembretes))) continue;
+    const expirou = !lembreteDevido(p, agora) && expiracaoDevida(p, agora);
+    if (!expirou && !lembreteDevido(p, agora)) continue;
+    if (!(await deps.repo.reservar(p.id, p.lembretes, expirou))) continue;
     try {
-      const texto = textoLembrete(p, agora);
+      const texto = expirou ? textoExpiracao(p) : textoLembrete(p, agora);
       const envio = await deps.enviar(p.waId, texto);
       await deps.registrarSaida(p.conversaId, texto, envio);
-      deps.log("lembrete_comprovante", {
+      deps.log(expirou ? "reserva_expirada_aviso" : "lembrete_comprovante", {
         conversa: p.conversaId,
         numero: p.lembretes + 1,
         envio_ok: envio.ok,

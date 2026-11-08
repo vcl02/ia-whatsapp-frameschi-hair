@@ -151,3 +151,6 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
 - Resposta em duplicidade (comprovante seguido de texto): o contexto da IA agora
   diz quando o sistema acabou de agendar (até 3 min) e espera o comprovante em
   processamento terminar; "resposta" vazia sem passar para humano não envia nada.
+- Fim da reserva: se os 30 min passam sem comprovante, a proposta vira "expirado" e a
+  cliente recebe um último aviso de que o horário não foi agendado (só se a IA da
+  conversa não estiver pausada).

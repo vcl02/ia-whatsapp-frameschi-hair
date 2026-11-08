@@ -24,10 +24,9 @@ import type {
   PropostaRecente,
   RepositorioPropostas,
 } from "./agendamento.ts";
-import {
-  MAX_LEMBRETES,
-  type PropostaParaLembrete,
-  type RepositorioLembretes,
+import type {
+  PropostaParaLembrete,
+  RepositorioLembretes,
 } from "./lembrete.ts";
 
 export function clienteServico(): SupabaseClient {
@@ -598,8 +597,7 @@ export class LembretesSupabase implements RepositorioLembretes {
           "id, conversa_id, nome_cliente, servico_nome, data, hora, preco, criado_em, expira_em, lembretes, salao_conversas(wa_id, bot_pausado)",
         )
         .eq("status", "proposto")
-        .lt("lembretes", MAX_LEMBRETES)
-        .gt("expira_em", new Date().toISOString()),
+        .gt("expira_em", new Date(Date.now() - 60 * 60_000).toISOString()),
     ) as Array<
       LinhaAgendamento & {
         lembretes: number;
@@ -634,11 +632,20 @@ export class LembretesSupabase implements RepositorioLembretes {
   }
 
   /** Marca o lembrete como enviado antes de mandar; false se outra execução já pegou. */
-  async reservar(id: string, atual: number): Promise<boolean> {
+  async reservar(
+    id: string,
+    atual: number,
+    expirar = false,
+  ): Promise<boolean> {
     const r = checar(
       await this.db
         .from("salao_agendamentos")
-        .update({ lembretes: atual + 1 })
+        .update({
+          lembretes: atual + 1,
+          ...(expirar
+            ? { status: "expirado", atualizado_em: new Date().toISOString() }
+            : {}),
+        })
         .eq("id", id)
         .eq("lembretes", atual)
         .eq("status", "proposto")
