@@ -115,6 +115,12 @@ export function lerEventos(
         const wamid = str(m.id);
         const waId = str(m.from);
         if (!wamid || !waId) continue;
+        // Reação (emoji em cima de uma mensagem) não é conversa: não grava, não responde
+        // e não chama ninguém. Emoji digitado como texto segue como mensagem normal.
+        if (m.type === "reaction") {
+          out.ignorados++;
+          continue;
+        }
         out.mensagens.push({
           wamid,
           waId,

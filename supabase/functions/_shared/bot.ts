@@ -86,7 +86,7 @@ async function enviarComApresentacao(
 ) {
   const primeira = !(await deps.repo.temSaida(c.id));
   const final = primeira
-    ? `${escolher(deps.salao.mensagensApresentacao, deps.aleatorio)}\n\n${texto}`
+    ? `${escolher(deps.salao.mensagensApresentacao, deps.aleatorio)} ${texto}`
     : texto;
   const envio = await deps.enviar(c.waId, final);
   await deps.repo.registrarSaida(c.id, "bot", final, envio);

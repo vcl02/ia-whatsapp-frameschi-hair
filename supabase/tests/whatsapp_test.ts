@@ -148,3 +148,14 @@ Deno.test("filtro por listas: o que a IA não atende não passa (mensagem, eco, 
   // Só familiares: some só o familiar.
   assertEquals(filtrarPorListas(ev, listas([], ["5511888887777"])).eventos.mensagens.map((m) => m.wamid), ["w1"]);
 });
+
+Deno.test("reação a mensagem é ignorada (não grava nem chama humano); emoji digitado é texto", () => {
+  const ev = lerEventos(payload({
+    messages: [
+      { id: "wamid.r", from: "55", timestamp: "1", type: "reaction", reaction: { message_id: "wamid.x", emoji: "👍" } },
+      { id: "wamid.t", from: "55", timestamp: "2", type: "text", text: { body: "👍" } },
+    ],
+  }), PNID);
+  assertEquals(ev.mensagens.map((m) => m.texto), ["👍"]);
+  assertEquals(ev.ignorados, 1);
+});
