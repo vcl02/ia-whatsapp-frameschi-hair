@@ -88,9 +88,19 @@
         height: 40px;
         border-radius: 50%;
       }
-      .marca {
+      .ia-topo {
         flex: 1;
         min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .marca {
+        min-width: 0;
+      }
+      .topo .meta {
+        color: var(--muted);
+        font-size: 12.5px;
       }
       .marca h1 {
         font-size: 17px;
@@ -301,8 +311,8 @@
       }
       .btn-ia {
         flex: none;
-        width: 46px;
-        height: 46px;
+        width: 44px;
+        height: 44px;
         padding: 0;
         border-radius: 50%;
         display: inline-grid;
@@ -514,8 +524,16 @@
         body.ver-tecnico .numeros.cinco {
           grid-template-columns: 1fr 1fr;
         }
-        .hero {
-          gap: 14px;
+        .topo {
+          padding: 14px;
+          gap: 8px;
+        }
+        .marca h1 {
+          font-size: 15px;
+          white-space: nowrap;
+        }
+        .ia-topo {
+          gap: 10px;
         }
         .linha {
           flex-wrap: wrap;
@@ -540,9 +558,18 @@
   </head>
   <body>
     <header class="topo">
-      <img src="../logo.png" alt="" width="40" height="40" />
-      <div class="marca">
-        <h1>Painel IA</h1>
+      <div id="marcaLogin" class="ia-topo">
+        <img src="../logo.png" alt="" width="40" height="40" />
+        <div class="marca">
+          <h1>Painel IA</h1>
+        </div>
+      </div>
+      <div id="iaTopo" class="ia-topo oculto">
+        <button id="iaChave" class="btn-ia" aria-pressed="false" aria-label="IA" disabled></button>
+        <div class="marca">
+          <h1>IA Novas Conversas</h1>
+          <p id="iaMeta" class="meta"></p>
+        </div>
       </div>
       <div class="acoes">
         <button id="btnOlho" class="btn btn-icone olho oculto" title="Mostrar informações técnicas" aria-label="Informações técnicas" aria-pressed="false">
@@ -567,14 +594,6 @@
     </form>
 
     <main id="app" class="oculto">
-      <section id="hero" class="card hero">
-        <button id="iaChave" class="btn-ia" aria-pressed="false" aria-label="IA" disabled></button>
-        <div class="texto">
-          <h2>IA Novas Conversas</h2>
-          <p id="iaMeta" class="meta"></p>
-        </div>
-      </section>
-
       <section class="numeros" id="numeros"></section>
 
       <section class="card">

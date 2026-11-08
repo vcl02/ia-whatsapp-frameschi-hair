@@ -47,9 +47,6 @@ let iaAtiva = null;
 
 function desenharIA(ctrl) {
   iaAtiva = ctrl.ia_ativa;
-  const hero = $("hero");
-  hero.classList.toggle("ligada", iaAtiva);
-  hero.classList.toggle("desligada", !iaAtiva);
   $("iaMeta").textContent = ctrl.atualizado_em ? `Atualização: ${quando(ctrl.atualizado_em)}` : "";
   const chave = $("iaChave");
   chave.classList.toggle("ligada", iaAtiva);
@@ -377,6 +374,8 @@ sb.auth.onAuthStateChange((_ev, sessao) => {
   $("btnSair").classList.toggle("oculto", !logado);
   $("btnAtualizar").classList.toggle("oculto", !logado);
   $("btnOlho").classList.toggle("oculto", !logado);
+  $("iaTopo").classList.toggle("oculto", !logado);
+  $("marcaLogin").classList.toggle("oculto", logado);
   clearInterval(timer);
   if (logado) {
     carregar();
