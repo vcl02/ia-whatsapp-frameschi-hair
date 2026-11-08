@@ -46,6 +46,9 @@ visão e funções `salao_*`.
   disponibilidade, agendamento, bot, salao, aviso, lembrete.
 - `salao-lembrete`: index, handler e, em `_shared`: deps, whatsapp, db, salao, bot, llm,
   disponibilidade, agendamento, lembrete.
-- `salao-sincronizar`: index, handler e, em `_shared`: deps, db, llm, aviso, minhaagenda
-  (o `db.ts` importa `llm.ts`; imports só de tipo não precisam ir junto).
+- `salao-sincronizar`: index, handler e, em `_shared`: deps, db, llm, aviso, minhaagenda,
+  agendamento, disponibilidade, salao, bot, whatsapp, lembrete (o `db.ts` importa
+  `agendamento.ts`, que importa `disponibilidade.ts`).
+- Cuidado com o espaço especial (U+00A0) na regex de `minhaagenda.ts`: se virar espaço
+  comum, a sincronização acha que todos os preços mudaram.
 - Depois de cada deploy, comparar os arquivos publicados com os do repositório.
