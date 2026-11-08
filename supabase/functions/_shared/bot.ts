@@ -49,6 +49,8 @@ export interface DepsBot {
   esperar(ms: number): Promise<void>;
   /** Ferramentas do modelo (consultar/propor/confirmar). Ausente = desligadas. */
   ferramentas?: (ctx: ContextoConversa) => Ferramentas;
+  /** Texto da proposta de agendamento pendente da conversa (ou null). */
+  propostaPendente?: (conversaId: string) => Promise<string | null>;
   /** Número entre 0 e 1 (Math.random). Injetável para os testes. */
   aleatorio?: () => number;
   log(evento: string, dados?: Record<string, unknown>): void;
@@ -183,6 +185,7 @@ export async function processarMensagem(
   let decisao;
   try {
     const historico = await deps.repo.historico(c.id, LIMITE_HISTORICO);
+    const propostaPendente = await deps.propostaPendente?.(c.id).catch(() => null);
     decisao = await deps.atendente.responder(historico, servicos, salao, {
       ferramentas: deps.ferramentas?.({
         conversaId: c.id,
@@ -192,6 +195,7 @@ export async function processarMensagem(
         servicos,
       }),
       nomeCliente: c.nomePerfil,
+      propostaPendente,
       modelo: cfg.modelo,
       esforco: cfg.esforco,
     });

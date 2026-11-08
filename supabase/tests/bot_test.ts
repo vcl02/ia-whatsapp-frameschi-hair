@@ -192,3 +192,12 @@ Deno.test("horário e regras do Minha Agenda chegam ao modelo", async () => {
   assertEquals(t.salaoRecebido.valor?.regrasAgendamento, "Tolerância de 10 min.");
   assertEquals(t.salaoRecebido.valor?.endereco, SALAO.endereco); // endereço continua fixo
 });
+
+Deno.test("proposta pendente da conversa é passada para a IA", async () => {
+  const t = montar({ resposta: "ok", passar_para_humano: false, motivo: "", intencao: "agendar" });
+  let recebida: string | null | undefined;
+  t.deps.atendente = { responder: (_h, _s, _d, o) => (recebida = o?.propostaPendente, Promise.resolve({ resposta: "ok", passar_para_humano: false, motivo: "", intencao: "agendar" as const })) };
+  t.deps.propostaPendente = () => Promise.resolve("Hidratação, 2026-11-11 às 09:00 com Bruna");
+  await processarMensagem(t.deps, "c1", msg({ texto: "SIM" }));
+  assertEquals(recebida, "Hidratação, 2026-11-11 às 09:00 com Bruna");
+});

@@ -162,6 +162,15 @@ export async function tratar(req: Request): Promise<Response> {
             maxDias: 15, // o agendamento online abre até 15 dias à frente (Minha Agenda)
           })
       : undefined,
+    propostaPendente: agendarLigado
+      ? async (conversaId) => {
+          const p = await new RepositorioPropostasSupabase(db).pendente(
+            conversaId,
+          );
+          if (!p || p.expiraEm < Date.now()) return null;
+          return `${p.servicoNome}, ${p.data} às ${p.hora} com ${p.profissionalNome}${p.preco ? `, ${p.preco}` : ""}, no nome de ${p.nomeCliente}`;
+        }
+      : undefined,
     log: logar,
   };
 
