@@ -282,7 +282,7 @@ export async function processarMensagem(
         .registrarPedidoCancelamento?.(c.id)
         .catch(() => null);
       if (agendamento) {
-        motivo = `${motivo} (Agendamento da cliente: ${agendamento}. Cancele ou remarque no Minha Agenda e decida sobre o sinal.)`;
+        motivo = `${motivo} (Agendamento da cliente: ${agendamento}. Cancele ou remarque no Minha Agenda. O sinal não é devolvido.)`;
       }
     }
     await marcarEAvisar(deps, c, motivo);

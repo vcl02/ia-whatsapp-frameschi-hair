@@ -180,3 +180,10 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
 - Cancelamento automático fica para depois e depende de a Bruna ligar o cancelamento
   pela cliente no Minha Agenda (isso vale também para o site dela) e de guardarmos a
   sessão de cada agendamento.
+- Regra da Bruna (2026-11-08): o sinal de 20% **não é devolvido** em caso de cancelamento. A
+  IA avisa isso ao pedir o Pix e de novo se a cliente pedir para cancelar (sem prometer
+  devolução nem crédito); o e-mail da equipe repete "o sinal não é devolvido".
+- O Minha Agenda recusa ligar "Cancelamento pelo Cliente" com "Agendamento sem Login"
+  ativo ("o usuário não teria cadastro para cancelar"). O agendamento da IA é o fluxo
+  sem login (convidada), então o cancelamento automático por esse caminho não é viável
+  com a configuração atual; desligar o "sem login" mudaria o site da Bruna inteiro.

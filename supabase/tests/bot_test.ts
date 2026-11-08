@@ -285,7 +285,7 @@ Deno.test("pedido de cancelamento: marca o agendamento e manda o resumo no aviso
   assertEquals(marcou, "c1");
   assertStringIncludes(t.avisos[0], "Cliente quer cancelar");
   assertStringIncludes(t.avisos[0], "Corte, quinta-feira, 12/11");
-  assertStringIncludes(t.avisos[0], "decida sobre o sinal");
+  assertStringIncludes(t.avisos[0], "O sinal não é devolvido");
 });
 
 Deno.test("outra passagem para a Bruna não marca cancelamento", async () => {

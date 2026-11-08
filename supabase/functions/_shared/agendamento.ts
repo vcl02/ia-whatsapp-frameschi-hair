@@ -367,7 +367,7 @@ export function montarFerramentas(
       `Para confirmar, a cliente paga um sinal de 20% por Pix: ${sinal.texto}` +
       `${sinal.aPartirDe ? " (calculado sobre o valor mínimo; a Bruna confirma o valor final)" : ""}. ` +
       `Chave Pix: ${deps.pix.chave} (titular: ${deps.pix.titular}). ` +
-      `Mande à cliente, num parágrafo só, o resumo do horário, o valor do sinal e a chave Pix, e peça o comprovante em imagem ou PDF aqui na conversa. ` +
+      `Mande à cliente o resumo do horário, o valor do sinal e a chave Pix, e peça o comprovante em imagem ou PDF aqui na conversa. Avise também, com carinho, que o sinal não é devolvido em caso de cancelamento. ` +
       `O sistema agenda sozinho quando o comprovante chegar: você NÃO agenda e NUNCA diz que está agendado nem que o pagamento foi confirmado. Ainda NÃO está agendado.`
     );
   }
@@ -534,7 +534,7 @@ export async function contextoDoAgendamento(
   const ativo = await repo.agendadoAtivo(conversaId, hojeSaoPaulo(agora));
   if (ativo) {
     partes.push(
-      `Agendamento ativo desta cliente (feito pelo sistema): ${resumoDoAgendamento(ativo)}. Se ela pedir para cancelar ou remarcar: confirme com ela que é esse horário, explique a política de cancelamento do salão (está nas regras do agendamento) e diga que a Bruna cuida do cancelamento e do sinal. Não prometa devolução do sinal. Marque passar_para_humano = true e intencao = remarcar_ou_cancelar, e escreva no "motivo" o pedido dela.`,
+      `Agendamento ativo desta cliente (feito pelo sistema): ${resumoDoAgendamento(ativo)}. Se ela pedir para cancelar ou remarcar: confirme com ela que é esse horário, explique a política de cancelamento do salão (está nas regras do agendamento) e diga que a Bruna cuida do cancelamento e do sinal. O sinal NÃO é devolvido em caso de cancelamento (regra da Bruna): diga isso com carinho e clareza, sem prometer devolução nem crédito. Marque passar_para_humano = true e intencao = remarcar_ou_cancelar, e escreva no "motivo" o pedido dela.`,
     );
   }
   return partes.length ? partes.join("\n") : null;

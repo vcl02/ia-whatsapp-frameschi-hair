@@ -292,7 +292,7 @@ Deno.test("contexto da IA: agendamento ativo traz o roteiro de cancelamento; pas
   assertStringIncludes(t, "Agendamento ativo desta cliente");
   assertStringIncludes(t, "Banho de Lua, terça-feira, 10/11, às 09:00, com Bruna, no nome de Isa, sinal de R$ 6,00");
   assertStringIncludes(t, "remarcar_ou_cancelar");
-  assertStringIncludes(t, "Não prometa devolução do sinal");
+  assertStringIncludes(t, "O sinal NÃO é devolvido");
   // depois do dia do agendamento, não é mais ativo
   assertEquals(await contextoDoAgendamento(c.propostas, "c1", new Date("2026-11-12T12:00:00Z"), sem), null);
 });
