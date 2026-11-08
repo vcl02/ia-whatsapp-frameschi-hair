@@ -71,7 +71,10 @@ export interface Atendente {
   ): Promise<DecisaoLLM>;
 }
 
-const MAX_RODADAS_FERRAMENTA = 4;
+const MAX_RODADAS_FERRAMENTA = 8;
+// Dito ao modelo quando só resta mais uma chamada: ele precisa responder à cliente.
+const AVISO_ULTIMA_RODADA =
+  "Limite de consultas atingido: não consulte mais nada. Responda agora à cliente com o que já sabe e pergunte o que falta (por exemplo, qual serviço e qual dia).";
 
 const SCHEMA = {
   type: "object",
@@ -121,7 +124,7 @@ ${servicos}
 O que fazer:
 1. Tirar dúvidas usando SOMENTE os dados acima.
 2. Entender qual serviço a cliente quer.
-3. Horários livres: se a cliente perguntar se tem vaga num dia e a ferramenta consultar_horarios estiver disponível, use-a com o id do serviço e a data. Se ela não disse o serviço ou o dia, pergunte antes. Passe os horários dizendo com qual profissional é cada um e que é o que aparece agora. Nunca diga horários livres sem consultar. Se a consulta falhar ou a ferramenta não estiver disponível, mande o link de agendamento.
+3. Horários livres: se a cliente perguntar se tem vaga num dia e a ferramenta consultar_horarios estiver disponível, use-a com o id do serviço e a data. Se ela não disse o serviço ou o dia, pergunte antes. Se houver mais de um serviço parecido (por exemplo, com formol e sem formol), pergunte qual ela quer antes de consultar. Consulte um dia por vez. Passe os horários dizendo com qual profissional é cada um e que é o que aparece agora. Nunca diga horários livres sem consultar. Se a consulta falhar ou a ferramenta não estiver disponível, mande o link de agendamento.
 4. Agendar: se as ferramentas propor_agendamento e confirmar_agendamento estiverem disponíveis e a cliente escolher serviço, dia, horário e profissional, chame propor_agendamento (nome_cliente = nome do perfil informado no fim destas instruções; se não houver nome, pergunte antes). Mande à cliente o resumo que a ferramenta devolver e peça para responder SIM. Nunca chame propor_agendamento e confirmar_agendamento na mesma resposta: escolher horário não é confirmar. Só chame confirmar_agendamento quando a mensagem da cliente for a resposta SIM a um resumo que você já mandou. Só diga que está agendado se confirmar_agendamento devolver AGENDADO. Se as ferramentas de agendamento não estiverem disponíveis, mande o link para ela agendar.
 5. Remarcar ou cancelar: você não faz; diga que a Bruna vai ajudar e marque passar_para_humano = true.
 
@@ -256,6 +259,8 @@ export class AtendenteClaude implements Atendente {
       { type: "text", text: blocoContexto(this.relogio(), nomeCliente) },
     ];
     for (let rodada = 0; rodada <= MAX_RODADAS_FERRAMENTA; rodada++) {
+      // Na última chamada o modelo não pode mais usar ferramentas: tem que responder.
+      const ultima = rodada === MAX_RODADAS_FERRAMENTA;
       const resp = await this.client.beta.messages.create({
         model: modelo ?? MODELO,
         max_tokens: 4096,
@@ -267,6 +272,9 @@ export class AtendenteClaude implements Atendente {
         },
         ...(ferramentas?.definicoes.length
           ? { tools: ferramentas.definicoes }
+          : {}),
+        ...(ultima && ferramentas?.definicoes.length
+          ? { tool_choice: { type: "none" as const } }
           : {}),
         system,
         messages,
@@ -293,7 +301,13 @@ export class AtendenteClaude implements Atendente {
         // Devolve o turno do modelo sem alterar (inclui blocos de raciocínio) + os resultados.
         messages.push(
           { role: "assistant", content: resp.content },
-          { role: "user", content: resultados },
+          {
+            role: "user",
+            content:
+              rodada + 1 === MAX_RODADAS_FERRAMENTA
+                ? [...resultados, { type: "text", text: AVISO_ULTIMA_RODADA }]
+                : resultados,
+          },
         );
         continue;
       }

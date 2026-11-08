@@ -424,6 +424,7 @@ export function montarFerramentas(
   return {
     definicoes,
     executar(nome, entrada) {
+      deps.log("ferramenta", { nome }); // só o nome, sem dados da cliente
       if (nome === "consultar_horarios") return consultar(entrada);
       if (podeAgendar && nome === "propor_agendamento") return propor(entrada);
       if (podeAgendar && nome === "confirmar_agendamento") return confirmar();

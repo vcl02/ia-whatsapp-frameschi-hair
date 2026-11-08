@@ -94,9 +94,9 @@ Deno.test("sem ferramentas, não oferece nenhuma e pede o nome se não houver pe
   assertStringIncludes((pedidos[0].system as Array<{ text: string }>)[1].text, "pergunte o nome");
 });
 
-Deno.test("limita o número de consultas por resposta", async () => {
+Deno.test("se o modelo ignora a última chamada sem ferramentas e insiste em consultar, dá erro (vai para humano)", async () => {
   const chamada = { stop_reason: "tool_use", content: [{ type: "tool_use", id: "t", name: "consultar_horarios", input: { servico_id: 1, data: "2026-11-10" } }] };
-  const { cliente } = clienteFalso([chamada, chamada, chamada, chamada, chamada, chamada]);
+  const { cliente } = clienteFalso(Array(9).fill(chamada));
   const atendente = new AtendenteClaude("x", () => new Date(), cliente);
   let erro = "";
   try {
@@ -119,4 +119,21 @@ Deno.test("modelo e esforço escolhidos no painel vão para a API; sem escolha, 
   await atendente.responder(hist, SERVICOS_COM_ID, SALAO);
   assertEquals([a.pedidos[0].model, (a.pedidos[0].output_config as { effort: string }).effort], ["claude-opus-5-5", "high"]);
   assertEquals([a.pedidos[1].model, (a.pedidos[1].output_config as { effort: string }).effort], ["claude-sonnet-5-5", "medium"]);
+});
+
+Deno.test("esgotou as rodadas de ferramenta: última chamada sem ferramentas e a IA responde (não dá erro)", async () => {
+  const usoFerramenta = { stop_reason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "consultar_horarios", input: { servico_id: 5732343, data: "2026-11-10" } }] };
+  const a = clienteFalso([...Array(8).fill(usoFerramenta), respostaFinal("Qual serviço e qual dia você prefere?")]);
+  const atendente = new AtendenteClaude("x", () => new Date("2026-11-07T12:00:00Z"), a.cliente);
+  const chamadas: string[] = [];
+  const ferramentas = { definicoes: [DEF_CONSULTAR], executar: (n: string) => (chamadas.push(n), Promise.resolve("sem horários")) };
+  const d = await atendente.responder([{ autor: "cliente", texto: "agenda a progressiva" }], SERVICOS_COM_ID, SALAO, { ferramentas });
+  assertEquals(d.resposta, "Qual serviço e qual dia você prefere?");
+  assertEquals(chamadas.length, 8);
+  assertEquals(a.pedidos.length, 9);
+  assertEquals(a.pedidos[0].tool_choice, undefined);
+  assertEquals(a.pedidos[8].tool_choice, { type: "none" });
+  // o aviso de limite vai junto dos resultados da penúltima rodada
+  const ultimaMsg = (a.pedidos[8].messages as Array<{ content: Array<{ type: string; text?: string }> }>).at(-1)!;
+  assertStringIncludes(ultimaMsg.content.at(-1)!.text ?? "", "Limite de consultas atingido");
 });
