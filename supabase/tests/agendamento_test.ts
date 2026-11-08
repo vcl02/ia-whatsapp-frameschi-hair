@@ -87,7 +87,7 @@ const SERVICOS = [
 ];
 const PIX = { chave: "11999990000", titular: "Bruna Frameschi" };
 
-function cenario(opcoes: { livre?: boolean; falharAgendamento?: boolean; semPix?: boolean } = {}) {
+function cenario(opcoes: { livre?: boolean; falharAgendamento?: boolean; semPix?: boolean; semLimiteDiario?: boolean } = {}) {
   const propostas = new PropostasMemoria();
   const agendados: PedidoAgendamento[] = [];
   const avisos: Array<[string, string]> = [];
@@ -100,7 +100,7 @@ function cenario(opcoes: { livre?: boolean; falharAgendamento?: boolean; semPix?
   const agendador = { agendar: (p: PedidoAgendamento) => opcoes.falharAgendamento ? Promise.reject(new Error("HTTP 409")) : (agendados.push(p), Promise.resolve()) };
   const comuns = { avisar: (a: string, t: string) => (avisos.push([a, t]), Promise.resolve()), log: () => {}, agora: () => agoraAtual };
   const deps: DepsFerramentas = { consulta, agendador, propostas, pix: opcoes.semPix ? undefined : PIX, maxDias: 15, ...comuns };
-  const depsComp: DepsComprovante = { consulta, agendador, propostas, ...comuns };
+  const depsComp: DepsComprovante = { consulta, agendador, propostas, semLimiteDiario: opcoes.semLimiteDiario, ...comuns };
   return {
     propostas, agendados, avisos,
     ferramentas: () => montarFerramentas({ conversaId: "c1", waId: "5511992090474", servicos: SERVICOS }, deps),
@@ -255,4 +255,14 @@ Deno.test("contexto da IA: espera o comprovante em processamento terminar", asyn
   c.propostas.atualizadoEm = AGORA.getTime();
   assertStringIncludes((await contextoDoAgendamento(c.propostas, "c1", AGORA, esperar))!, "acabou de agendar");
   assertEquals(esperas, 2);
+});
+
+Deno.test("número de teste não tem o limite de 1 agendamento por dia (agenda de novo)", async () => {
+  const c = cenario({ semLimiteDiario: true });
+  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
+  await c.comprovante();
+  c.avancar(2 * 60 * 60_000);
+  await c.ferramentas().executar("propor_agendamento", { ...PROPOSTA, hora: "11:00" });
+  assertEquals((await c.comprovante())?.acao, "responder");
+  assertEquals(c.agendados.length, 2);
 });

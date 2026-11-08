@@ -178,7 +178,14 @@ export async function tratar(req: Request): Promise<Response> {
         ? (c, m) =>
             receberComprovante(
               { conversaId: c.id, waId: c.waId },
-              { consulta, agendador, propostas, avisar: avisarResumo, log: logar },
+              {
+                consulta,
+                agendador,
+                propostas,
+                avisar: avisarResumo,
+                log: logar,
+                semLimiteDiario: listas.teste.has(c.waId),
+              },
               m.tipo,
             )
         : undefined,

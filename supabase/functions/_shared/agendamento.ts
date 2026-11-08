@@ -385,6 +385,8 @@ export interface DepsComprovante {
   avisar: (assunto: string, texto: string) => Promise<void>;
   log: (evento: string, dados?: Record<string, unknown>) => void;
   agora?: () => Date;
+  /** Número da lista de teste: não vale o limite de 1 agendamento por conversa a cada 24 h. */
+  semLimiteDiario?: boolean;
 }
 
 /**
@@ -422,7 +424,10 @@ export async function receberComprovante(
     );
   }
   const desde = new Date(agora().getTime() - 24 * 60 * 60_000);
-  if ((await deps.propostas.agendadosDesde(ctx.conversaId, desde)) >= MAX_AGENDAMENTOS_DIA) {
+  if (
+    !deps.semLimiteDiario &&
+    (await deps.propostas.agendadosDesde(ctx.conversaId, desde)) >= MAX_AGENDAMENTOS_DIA
+  ) {
     return chamarBruna(
       "Recebi seu comprovante! 💖 Vou chamar a Bruna para te ajudar com esse novo horário.",
       "comprovante recebido, mas esta conversa já teve um agendamento hoje",
