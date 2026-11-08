@@ -19,6 +19,8 @@ export interface Conversa {
 }
 
 export interface Repositorio {
+  /** Interruptor global da IA (painel). Desligada = só registra as mensagens, não responde. */
+  iaAtiva(): Promise<boolean>;
   conversa(id: string): Promise<Conversa>;
   historico(conversaId: string, limite: number): Promise<ItemHistorico[]>;
   ultimaEntradaWamid(conversaId: string): Promise<string | null>;
@@ -53,6 +55,7 @@ export interface DepsBot {
 }
 
 export type Resultado =
+  | "ia_desligada"
   | "pausado"
   | "substituida_por_mais_recente"
   | "respondido"
@@ -126,6 +129,8 @@ export async function processarMensagem(
   msg: MensagemRecebida,
 ): Promise<Resultado> {
   await deps.esperar(ESPERA_AGRUPAR_MS);
+
+  if (!(await deps.repo.iaAtiva())) return "ia_desligada";
 
   const c = await deps.repo.conversa(conversaId);
   if (c.botPausado) return "pausado";

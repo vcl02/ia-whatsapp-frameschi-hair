@@ -13,6 +13,8 @@ class RepoFake implements Repositorio {
   saidas: { autor: string; texto: string }[] = [];
   humano: string | null = null;
   pausarDuranteLLM = false;
+  ia = true;
+  iaAtiva() { return Promise.resolve(this.ia); }
   respostasConversaHora = 0;
   respostasGlobaisDia = 0;
   respostasDoBot(conversaId: string | null) { return Promise.resolve(conversaId ? this.respostasConversaHora : this.respostasGlobaisDia); }
@@ -71,6 +73,14 @@ Deno.test("primeira resposta da conversa leva a apresentação", async () => {
   t.repo.jaRespondeu = false;
   await processarMensagem(t.deps, "c1", msg());
   assertEquals(t.enviados, [`${SALAO.mensagensApresentacao[0]}\n\nA escova é R$ 50!`]);
+});
+
+Deno.test("IA desligada no painel: não responde, não chama a LLM e não avisa", async () => {
+  const t = montar(ok);
+  t.repo.ia = false;
+  assertEquals(await processarMensagem(t.deps, "c1", msg()), "ia_desligada");
+  assertEquals(t.enviados.length + t.llm(), 0);
+  assertEquals(t.repo.humano, null);
 });
 
 Deno.test("conversa pausada: não responde nem chama a LLM", async () => {

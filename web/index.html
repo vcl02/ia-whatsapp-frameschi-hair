@@ -5,209 +5,422 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
     <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#1e2126" />
     <meta
       http-equiv="Content-Security-Policy"
       content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; connect-src https://yzmyncxoskvqzdczaill.supabase.co wss://yzmyncxoskvqzdczaill.supabase.co; img-src 'self' data:; base-uri 'none'; form-action 'none'"
     />
-    <title>Conversas do salão</title>
+    <title>Painel da IA</title>
     <link rel="icon" type="image/png" href="../favicon.png" />
     <link rel="apple-touch-icon" href="../apple-touch-icon.png" />
     <style>
       :root {
-        --bg: #fafafa;
-        --fg: #1a1a1a;
-        --muted: #666;
-        --line: #ddd;
-        --card: #fff;
-        --cliente: #fff;
-        --bot: #e8f0fe;
-        --humano: #e6f4ea;
-        --alerta: #b3261e;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #121212;
-          --fg: #eee;
-          --muted: #aaa;
-          --line: #333;
-          --card: #1e1e1e;
-          --cliente: #1e1e1e;
-          --bot: #1c2a44;
-          --humano: #1d3326;
-          --alerta: #f28b82;
-        }
+        --bg: #1e2126;
+        --surface: #272b32;
+        --surface-2: #2f343c;
+        --line: #3a404a;
+        --fg: #e9ebee;
+        --muted: #9aa3af;
+        --gold: #d6b36a;
+        --gold-soft: rgba(214, 179, 106, 0.14);
+        --ok: #62c98f;
+        --ok-soft: rgba(98, 201, 143, 0.14);
+        --warn: #e6b866;
+        --warn-soft: rgba(230, 184, 102, 0.14);
+        --bad: #ef7f7f;
+        --bad-soft: rgba(239, 127, 127, 0.14);
+        --radius: 16px;
       }
       * {
         box-sizing: border-box;
       }
+      html {
+        color-scheme: dark;
+      }
       body {
         margin: 0;
-        font:
-          15px/1.4 system-ui,
-          sans-serif;
         background: var(--bg);
         color: var(--fg);
+        font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        -webkit-font-smoothing: antialiased;
       }
-      header {
-        display: flex;
-        gap: 12px;
-        align-items: center;
-        padding: 10px 16px;
-        border-bottom: 1px solid var(--line);
-      }
-      header h1 {
-        font-size: 16px;
+      h1,
+      h2,
+      h3,
+      p {
         margin: 0;
-        flex: 1;
-      }
-      header img {
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
       }
       button {
         font: inherit;
-        padding: 6px 12px;
-        border: 1px solid var(--line);
-        border-radius: 6px;
-        background: var(--card);
-        color: var(--fg);
+        color: inherit;
         cursor: pointer;
       }
-      input,
-      textarea {
+      input {
         font: inherit;
-        padding: 8px;
-        border: 1px solid var(--line);
-        border-radius: 6px;
-        background: var(--card);
         color: var(--fg);
-        width: 100%;
-      }
-      #login {
-        max-width: 320px;
-        margin: 48px auto;
-        padding: 0 16px;
-        display: grid;
-        gap: 8px;
-      }
-      #app {
-        display: grid;
-        grid-template-columns: 300px 1fr;
-        height: calc(100vh - 49px);
-      }
-      #lista {
-        border-right: 1px solid var(--line);
-        overflow-y: auto;
-      }
-      .item {
-        padding: 10px 16px;
-        border-bottom: 1px solid var(--line);
-        cursor: pointer;
-      }
-      .item.ativo {
-        background: var(--bot);
-      }
-      .item small {
-        color: var(--muted);
-        display: block;
-      }
-      .tag {
-        font-size: 12px;
-        padding: 1px 6px;
-        border-radius: 10px;
-        border: 1px solid currentColor;
-        margin-left: 4px;
-      }
-      .alerta {
-        color: var(--alerta);
-      }
-      #conversa {
-        display: flex;
-        flex-direction: column;
-        min-width: 0;
-      }
-      #topo {
-        padding: 10px 16px;
-        border-bottom: 1px solid var(--line);
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        flex-wrap: wrap;
-      }
-      #topo strong {
-        flex: 1;
-      }
-      #aviso {
-        padding: 16px;
-        color: var(--muted);
-      }
-      table {
-        border-collapse: collapse;
-        width: 100%;
-        font-size: 13px;
-      }
-      td,
-      th {
+        background: var(--surface-2);
         border: 1px solid var(--line);
-        padding: 4px 6px;
-        text-align: left;
-        vertical-align: top;
+        border-radius: 10px;
+        padding: 11px 12px;
+        width: 100%;
+      }
+      input:focus-visible,
+      button:focus-visible {
+        outline: 2px solid var(--gold);
+        outline-offset: 2px;
       }
       .oculto {
         display: none !important;
       }
-      @media (max-width: 700px) {
-        #app {
+
+      /* topo */
+      .topo {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        max-width: 1040px;
+        margin: 0 auto;
+        padding: 18px 20px;
+      }
+      .topo img {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+      }
+      .marca {
+        flex: 1;
+        min-width: 0;
+      }
+      .marca h1 {
+        font-size: 17px;
+        font-weight: 650;
+        letter-spacing: 0.2px;
+      }
+      .marca p {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .btn {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 8px 14px;
+        transition: background 0.15s;
+      }
+      .btn:hover {
+        background: var(--surface-2);
+      }
+      .btn.pequeno {
+        padding: 5px 11px;
+        font-size: 13px;
+      }
+      .btn.ouro {
+        background: var(--gold);
+        border-color: var(--gold);
+        color: #1e2126;
+        font-weight: 600;
+      }
+
+      /* login */
+      #login {
+        max-width: 360px;
+        margin: 56px auto;
+        padding: 24px;
+        display: grid;
+        gap: 12px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+      }
+      #login h2 {
+        font-size: 18px;
+      }
+      #erroLogin {
+        color: var(--bad);
+        font-size: 13px;
+        min-height: 1em;
+      }
+
+      /* layout */
+      main {
+        max-width: 1040px;
+        margin: 0 auto;
+        padding: 0 20px 40px;
+        display: grid;
+        gap: 16px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 20px;
+      }
+      .card h2 {
+        font-size: 15px;
+        font-weight: 650;
+        margin-bottom: 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .card h2 .contagem {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+        background: var(--surface-2);
+        border-radius: 999px;
+        padding: 1px 9px;
+      }
+      .grade {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+
+      /* interruptor da IA */
+      .hero {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        border-color: var(--line);
+        background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
+      }
+      .hero.ligada {
+        border-color: rgba(98, 201, 143, 0.45);
+      }
+      .hero.desligada {
+        border-color: rgba(239, 127, 127, 0.45);
+      }
+      .hero .texto {
+        flex: 1;
+        min-width: 0;
+      }
+      .hero h2 {
+        font-size: 19px;
+        margin-bottom: 4px;
+      }
+      .hero .estado {
+        font-size: 14px;
+      }
+      .hero.ligada .estado {
+        color: var(--ok);
+      }
+      .hero.desligada .estado {
+        color: var(--bad);
+      }
+      .hero .meta {
+        color: var(--muted);
+        font-size: 12.5px;
+        margin-top: 6px;
+      }
+      .chave {
+        position: relative;
+        width: 76px;
+        height: 42px;
+        flex: none;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--surface-2);
+        padding: 0;
+        transition: background 0.2s, border-color 0.2s;
+      }
+      .chave::after {
+        content: "";
+        position: absolute;
+        top: 4px;
+        left: 4px;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--muted);
+        transition: transform 0.2s, background 0.2s;
+      }
+      .chave[aria-checked="true"] {
+        background: var(--ok-soft);
+        border-color: var(--ok);
+      }
+      .chave[aria-checked="true"]::after {
+        transform: translateX(34px);
+        background: var(--ok);
+      }
+      .chave:disabled {
+        opacity: 0.6;
+        cursor: wait;
+      }
+
+      /* números */
+      .numeros {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+      }
+      .numeros.cinco {
+        grid-template-columns: repeat(5, 1fr);
+      }
+      .numero {
+        padding: 16px 18px;
+        min-width: 0;
+      }
+      .numero .valor {
+        font-size: 30px;
+        font-weight: 700;
+        line-height: 1.1;
+        font-variant-numeric: tabular-nums;
+      }
+      .numero .rotulo {
+        color: var(--muted);
+        font-size: 13px;
+        margin-top: 4px;
+      }
+      .numero.alerta .valor {
+        color: var(--warn);
+      }
+      .numero.erro .valor {
+        color: var(--bad);
+      }
+
+      /* listas */
+      .lista {
+        display: grid;
+        gap: 8px;
+      }
+      .linha {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px;
+        background: var(--surface-2);
+        border-radius: 12px;
+      }
+      .linha .principal {
+        flex: 1;
+        min-width: 0;
+      }
+      .linha .titulo {
+        font-weight: 600;
+        overflow-wrap: anywhere;
+      }
+      .linha .sub {
+        color: var(--muted);
+        font-size: 12.5px;
+        overflow-wrap: anywhere;
+      }
+      .vazio {
+        color: var(--muted);
+        font-size: 14px;
+        padding: 6px 2px;
+      }
+      .selo {
+        font-size: 12px;
+        font-weight: 600;
+        padding: 2px 9px;
+        border-radius: 999px;
+        white-space: nowrap;
+      }
+      .selo.ok {
+        color: var(--ok);
+        background: var(--ok-soft);
+      }
+      .selo.warn {
+        color: var(--warn);
+        background: var(--warn-soft);
+      }
+      .selo.bad {
+        color: var(--bad);
+        background: var(--bad-soft);
+      }
+      .selo.gold {
+        color: var(--gold);
+        background: var(--gold-soft);
+      }
+      .quando {
+        color: var(--muted);
+        font-size: 12.5px;
+        white-space: nowrap;
+      }
+      .rodape {
+        color: var(--muted);
+        font-size: 12.5px;
+        text-align: center;
+        padding-top: 4px;
+      }
+
+      @media (max-width: 760px) {
+        .grade {
           grid-template-columns: 1fr;
         }
-        #lista {
-          max-height: 35vh;
-          border-right: 0;
-          border-bottom: 1px solid var(--line);
+        .numeros,
+        .numeros.cinco {
+          grid-template-columns: 1fr 1fr;
+        }
+        .hero {
+          gap: 14px;
+        }
+        .linha {
+          flex-wrap: wrap;
+        }
+        .linha .principal {
+          flex: 1 1 160px;
+        }
+        .hero h2 {
+          font-size: 17px;
         }
       }
     </style>
   </head>
   <body>
-    <header>
-      <img src="../logo.png" alt="" width="32" height="32" />
-      <h1>Conversas do salão</h1>
-      <button id="btnSair" class="oculto">Sair</button>
+    <header class="topo">
+      <img src="../logo.png" alt="" width="40" height="40" />
+      <div class="marca">
+        <h1>Painel da IA</h1>
+        <p>Bruna Frameschi Hair</p>
+      </div>
+      <button id="btnSair" class="btn oculto">Sair</button>
     </header>
 
     <form id="login">
-      <input
-        id="email"
-        type="email"
-        placeholder="e-mail"
-        required
-        autocomplete="username"
-      />
-      <input
-        id="senha"
-        type="password"
-        placeholder="senha"
-        required
-        autocomplete="current-password"
-      />
-      <button>Entrar</button>
-      <p id="erroLogin" class="alerta"></p>
+      <h2>Entrar</h2>
+      <input id="email" type="email" placeholder="e-mail" required autocomplete="username" />
+      <input id="senha" type="password" placeholder="senha" required autocomplete="current-password" />
+      <button class="btn ouro">Entrar</button>
+      <p id="erroLogin"></p>
     </form>
 
-    <div id="app" class="oculto">
-      <nav id="lista"></nav>
-      <section id="conversa">
-        <div id="topo"><strong>Escolha uma conversa</strong></div>
-        <p id="aviso">O conteúdo das conversas não é exibido aqui. Use o botão acima para ativar ou desativar o bot de cada conversa; respostas pessoais são pelo app do WhatsApp.</p>
+    <main id="app" class="oculto">
+      <section id="hero" class="card hero">
+        <div class="texto">
+          <h2>IA de atendimento</h2>
+          <p id="iaEstado" class="estado">Carregando…</p>
+          <p id="iaMeta" class="meta"></p>
+        </div>
+        <button id="iaChave" class="chave" role="switch" aria-checked="false" aria-label="Ligar ou desligar a IA" disabled></button>
       </section>
-    </div>
 
-    <script
-      src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"
-      integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK"
-      crossorigin="anonymous"
-    ></script>
+      <section class="numeros" id="numeros"></section>
+
+      <div class="grade">
+        <section class="card">
+          <h2>Precisam de você <span id="atencaoN" class="contagem"></span></h2>
+          <div id="atencao" class="lista"></div>
+        </section>
+        <section class="card">
+          <h2>Erros <span id="errosN" class="contagem"></span></h2>
+          <div id="erros" class="lista"></div>
+        </section>
+      </div>
+
+      <section class="card">
+        <h2>Agendamentos feitos pela IA</h2>
+        <div id="agendamentos" class="lista"></div>
+      </section>
+
+      <p class="rodape">
+        Atualiza sozinho a cada 30 segundos. O conteúdo das conversas não é exibido aqui: respostas pessoais são pelo app do WhatsApp.
+      </p>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
     <script src="config.js"></script>
     <script src="painel.js"></script>
   </body>

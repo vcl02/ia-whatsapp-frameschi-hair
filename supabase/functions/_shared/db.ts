@@ -95,6 +95,24 @@ export class RepositorioSupabase implements Repositorio {
     );
   }
 
+  /**
+   * Interruptor global. Se a tabela ainda não existir (migration não aplicada),
+   * a IA segue ligada; qualquer outro erro propaga e nada é respondido.
+   */
+  async iaAtiva(): Promise<boolean> {
+    const { data, error } = await this.db
+      .from("salao_controle")
+      .select("ia_ativa")
+      .eq("id", 1)
+      .maybeSingle();
+    if (error) {
+      const code = (error as { code?: string }).code;
+      if (code === "42P01" || code === "PGRST205") return true;
+      throw error;
+    }
+    return data?.ia_ativa !== false;
+  }
+
   async conversa(id: string): Promise<Conversa> {
     const r = checar(
       await this.db
