@@ -11,7 +11,7 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; connect-src https://yzmyncxoskvqzdczaill.supabase.co wss://yzmyncxoskvqzdczaill.supabase.co; img-src 'self' data:; base-uri 'none'; form-action 'none'"
     />
-    <title>Painel da IA</title>
+    <title>Painel IA</title>
     <link rel="icon" type="image/png" href="../favicon.png" />
     <link rel="apple-touch-icon" href="../apple-touch-icon.png" />
     <style>
@@ -478,11 +478,11 @@
     <header class="topo">
       <img src="../logo.png" alt="" width="40" height="40" />
       <div class="marca">
-        <h1>Painel da IA</h1>
+        <h1>Painel IA</h1>
         <p>Bruna Frameschi Hair</p>
       </div>
       <div class="acoes">
-        <button id="btnAtualizar" class="btn atualizar oculto" title="Atualizar os dados"><span>↻</span> Atualizar</button>
+        <button id="btnAtualizar" class="btn atualizar oculto" title="Atualizar" aria-label="Atualizar"><span>↻</span></button>
         <button id="btnSair" class="btn oculto">Sair</button>
       </div>
     </header>
@@ -509,7 +509,6 @@
 
       <section class="card">
         <h2>Conversas <span id="conversasN" class="contagem"></span></h2>
-        <p class="ajuda">O ícone de cada conversa mostra a IA dela: verde = ligada, vermelho = pausada. Clique para pausar ou retomar. Vale só para aquela conversa e não depende do botão geral.</p>
         <div id="conversas" class="lista"></div>
       </section>
 
@@ -519,17 +518,15 @@
       </section>
 
       <section class="card">
-        <h2>Agendamentos feitos pela IA</h2>
+        <h2>Agendamentos IA</h2>
         <div id="agendamentos" class="lista"></div>
       </section>
 
       <section class="card">
-        <h2>Quem a IA atende</h2>
-        <p id="modoLista" class="modo"></p>
+        <p id="modoLista" class="modo oculto"></p>
         <div class="listas">
           <div>
-            <h3>Lista de teste</h3>
-            <p class="ajuda">Se tiver números aqui, a IA atende só eles (mesmo que também estejam em familiares). Vazia: atende todos, menos os familiares.</p>
+            <h3>Lista teste</h3>
             <div id="listaTeste" class="lista"></div>
             <form id="formTeste" class="adicionar">
               <input id="numTeste" inputmode="tel" placeholder="(11) 99999-9999" required />
@@ -538,8 +535,7 @@
             </form>
           </div>
           <div>
-            <h3>Familiares e outros</h3>
-            <p class="ajuda">A IA nunca responde a estes números, e as mensagens deles nem são guardadas.</p>
+            <h3>Não responder</h3>
             <div id="listaFamiliar" class="lista"></div>
             <form id="formFamiliar" class="adicionar">
               <input id="numFamiliar" inputmode="tel" placeholder="(11) 99999-9999" required />
@@ -549,10 +545,6 @@
           </div>
         </div>
       </section>
-
-      <p class="rodape">
-        Atualiza sozinho a cada 30 segundos. O conteúdo das conversas não é exibido aqui: respostas pessoais são pelo app do WhatsApp.
-      </p>
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>

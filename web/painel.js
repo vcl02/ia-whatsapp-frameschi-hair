@@ -178,14 +178,6 @@ function normalizarNumero(valor) {
 let listaTeste = [];
 let listaFamiliar = [];
 
-function desenharModo() {
-  $("modoLista").textContent = listaTeste.length
-    ? `Modo teste: a IA atende só os ${listaTeste.length} número(s) da lista de teste.`
-    : listaFamiliar.length
-      ? `Sem lista de teste: a IA atende todos os números, menos os ${listaFamiliar.length} da lista de familiares.`
-      : "Sem listas: a IA atende todos os números.";
-}
-
 function desenharLista(destino, tipo, itens) {
   $(destino).replaceChildren(
     ...(itens.length
@@ -199,19 +191,19 @@ function desenharLista(destino, tipo, itens) {
             x,
           );
         })
-      : [vazio("Ninguém na lista.")]),
+      : []),
   );
 }
 
 async function carregarListas() {
   const { data, error } = await sb.from("salao_numeros").select("wa_id, lista, nome").order("criado_em");
+  $("modoLista").classList.toggle("oculto", !error);
   if (error) {
     $("modoLista").textContent = "Não consegui ler as listas. Confira se a migration dos números foi aplicada.";
     return falha(error);
   }
   listaTeste = data.filter((n) => n.lista === "teste");
   listaFamiliar = data.filter((n) => n.lista === "familiar");
-  desenharModo();
   desenharLista("listaTeste", "teste", listaTeste);
   desenharLista("listaFamiliar", "familiar", listaFamiliar);
 }
@@ -298,7 +290,7 @@ async function carregarErros() {
             el("span", { class: "quando" }, quando(quandoEm)),
           ),
         )
-      : [vazio("Nenhum erro registrado. Tudo certo por aqui.")]),
+      : [vazio("Nenhum erro")]),
   );
 }
 
@@ -327,7 +319,7 @@ async function carregarAgendamentos() {
             el("span", { class: a.status === "agendado" ? "selo ok" : "selo bad" }, a.status === "agendado" ? "Agendado" : "Falhou"),
           ),
         )
-      : [vazio("A IA ainda não fez nenhum agendamento.")]),
+      : [vazio("Nenhum agendamento")]),
   );
 }
 
