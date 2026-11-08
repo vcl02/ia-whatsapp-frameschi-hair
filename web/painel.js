@@ -96,8 +96,9 @@ async function carregarNumeros() {
     ["Agendamentos hoje", data.agendamentos_hoje, ""],
     ["Precisam de você", data.precisam_atencao, data.precisam_atencao > 0 ? "alerta" : ""],
   ];
-  if (data.falhas_24h > 0) itens.push(["Erros nas últimas 24 h", data.falhas_24h, "erro"]);
+  if (data.falhas_24h > 0) itens.push(["Erros nas últimas 24 h", data.falhas_24h, "erro tecnico"]);
   $("numeros").classList.toggle("cinco", itens.length > 4);
+  $("btnOlho").classList.toggle("com-alerta", data.falhas_24h > 0);
   $("numeros").replaceChildren(
     ...itens.map(([rotulo, valor, tipo]) =>
       el("div", { class: `card numero ${tipo}` }, el("div", { class: "valor" }, String(valor)), el("div", { class: "rotulo" }, rotulo)),
@@ -336,6 +337,27 @@ $("btnAtualizar").onclick = async () => {
   b.classList.remove("girando");
 };
 
+// ---------- informações técnicas (olhinho) ----------
+function aplicarTecnico(ver) {
+  document.body.classList.toggle("ver-tecnico", ver);
+  const b = $("btnOlho");
+  b.setAttribute("aria-pressed", String(ver));
+  b.title = ver ? "Esconder informações técnicas" : "Mostrar informações técnicas";
+  try {
+    localStorage.setItem("painel-tecnico", ver ? "1" : "0");
+  } catch {
+    /* sem armazenamento: vale só nesta visita */
+  }
+}
+let verTecnico = false;
+try {
+  verTecnico = localStorage.getItem("painel-tecnico") === "1";
+} catch {
+  /* padrão: escondido */
+}
+aplicarTecnico(verTecnico);
+$("btnOlho").onclick = () => aplicarTecnico(!document.body.classList.contains("ver-tecnico"));
+
 // ---------- sessão ----------
 $("login").onsubmit = async (e) => {
   e.preventDefault();
@@ -354,6 +376,7 @@ sb.auth.onAuthStateChange((_ev, sessao) => {
   $("app").classList.toggle("oculto", !logado);
   $("btnSair").classList.toggle("oculto", !logado);
   $("btnAtualizar").classList.toggle("oculto", !logado);
+  $("btnOlho").classList.toggle("oculto", !logado);
   clearInterval(timer);
   if (logado) {
     carregar();
