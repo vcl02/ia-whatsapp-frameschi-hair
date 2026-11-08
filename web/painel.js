@@ -50,14 +50,14 @@ function desenharIA(ctrl) {
   const hero = $("hero");
   hero.classList.toggle("ligada", iaAtiva);
   hero.classList.toggle("desligada", !iaAtiva);
-  $("iaMeta").textContent = ctrl.atualizado_em ? `Última mudança: ${quando(ctrl.atualizado_em)}` : "";
+  $("iaMeta").textContent = ctrl.atualizado_em ? `Atualização: ${quando(ctrl.atualizado_em)}` : "";
   const chave = $("iaChave");
   chave.classList.toggle("ligada", iaAtiva);
   chave.classList.toggle("desligada", !iaAtiva);
   chave.setAttribute("aria-pressed", String(iaAtiva));
-  chave.replaceChildren(
-    el("span", {}, iaAtiva ? "IA ligada" : "IA desligada", el("small", {}, iaAtiva ? "Clique para desligar" : "Clique para ligar")),
-  );
+  chave.title = iaAtiva ? "IA ligada. Clique para desligar." : "IA desligada. Clique para ligar.";
+  chave.setAttribute("aria-label", chave.title);
+  chave.replaceChildren(iconePower());
   chave.disabled = false;
 }
 
