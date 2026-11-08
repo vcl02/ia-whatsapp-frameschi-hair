@@ -63,6 +63,11 @@ export interface DepsBot {
   ) => Promise<ResultadoComprovante | null>;
   /** Situação do agendamento da conversa em texto para a IA (ou null). */
   contextoAgendamento?: (conversaId: string) => Promise<string | null>;
+  /**
+   * A cliente pediu para cancelar ou remarcar: marca o agendamento dela e devolve o
+   * resumo (ou null se ela não tem agendamento ativo).
+   */
+  registrarPedidoCancelamento?: (conversaId: string) => Promise<string | null>;
   /** Número entre 0 e 1 (Math.random). Injetável para os testes. */
   aleatorio?: () => number;
   log(evento: string, dados?: Record<string, unknown>): void;
@@ -271,7 +276,16 @@ export async function processarMensagem(
   if ((await deps.repo.conversa(c.id)).botPausado) return "pausado";
 
   if (decisao.passar_para_humano) {
-    await marcarEAvisar(deps, c, decisao.motivo || "decisão da IA");
+    let motivo = decisao.motivo || "decisão da IA";
+    if (decisao.intencao === "remarcar_ou_cancelar") {
+      const agendamento = await deps
+        .registrarPedidoCancelamento?.(c.id)
+        .catch(() => null);
+      if (agendamento) {
+        motivo = `${motivo} (Agendamento da cliente: ${agendamento}. Cancele ou remarque no Minha Agenda e decida sobre o sinal.)`;
+      }
+    }
+    await marcarEAvisar(deps, c, motivo);
   }
   // Resposta vazia sem passar para humano = não há nada a dizer (ex.: a cliente só
   // agradeceu logo depois do agendamento): não manda nada.

@@ -1,6 +1,6 @@
 import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1.0.13";
 import {
-  AgendadorMinhaAgenda, DEF_PROPOR, contextoDoAgendamento, dataCurta, montarFerramentas, receberComprovante, sinalDoServico, telefoneNacional, valorDoPreco,
+  AgendadorMinhaAgenda, DEF_PROPOR, contextoDoAgendamento, dataCurta, resumoDoAgendamento, montarFerramentas, receberComprovante, sinalDoServico, telefoneNacional, valorDoPreco,
   type DepsComprovante, type DepsFerramentas, type PedidoAgendamento, type Proposta, type RepositorioPropostas,
 } from "../functions/_shared/agendamento.ts";
 import type { Agenda } from "../functions/_shared/disponibilidade.ts";
@@ -77,6 +77,17 @@ class PropostasMemoria implements RepositorioPropostas {
     return Promise.resolve(x ? { ...x, atualizadoEm: this.atualizadoEm ?? x.criadoEm } : null);
   }
   atualizadoEm?: number;
+  cancelamentosPedidos: string[] = [];
+  agendadoAtivo(c: string, hoje: string) {
+    const x = [...this.itens].reverse().find((i) => i.conversaId === c && i.status === "agendado" && i.data >= hoje);
+    return Promise.resolve(x ?? null);
+  }
+  async marcarCancelamentoPedido(c: string, hoje: string) {
+    const x = await this.agendadoAtivo(c, hoje);
+    if (!x) return null;
+    this.cancelamentosPedidos.push(x.id);
+    return resumoDoAgendamento(x);
+  }
 }
 
 const AGORA = new Date("2026-11-07T12:00:00Z");
@@ -242,8 +253,10 @@ Deno.test("contexto da IA: proposta pendente, agendamento recente e nada", async
   const feito = (await contextoDoAgendamento(c.propostas, "c1", new Date(AGORA.getTime() + 60_000), sem))!;
   assertStringIncludes(feito, "acabou de agendar");
   assertStringIncludes(feito, "deixe \"resposta\" vazia");
-  // 10 minutos depois já é conversa normal
-  assertEquals(await contextoDoAgendamento(c.propostas, "c1", new Date(AGORA.getTime() + 10 * 60_000), sem), null);
+  // 10 minutos depois não é mais "acabou de agendar", mas o agendamento segue ativo (futuro)
+  const depois = (await contextoDoAgendamento(c.propostas, "c1", new Date(AGORA.getTime() + 10 * 60_000), sem))!;
+  assertEquals(depois.includes("acabou de agendar"), false);
+  assertStringIncludes(depois, "Agendamento ativo desta cliente");
 });
 
 Deno.test("contexto da IA: espera o comprovante em processamento terminar", async () => {
@@ -265,4 +278,31 @@ Deno.test("número de teste não tem o limite de 1 agendamento por dia (agenda d
   await c.ferramentas().executar("propor_agendamento", { ...PROPOSTA, hora: "11:00" });
   assertEquals((await c.comprovante())?.acao, "responder");
   assertEquals(c.agendados.length, 2);
+});
+
+Deno.test("contexto da IA: agendamento ativo traz o roteiro de cancelamento; passado não conta", async () => {
+  const c = cenario();
+  const sem = () => Promise.resolve();
+  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
+  await c.comprovante();
+  c.propostas.atualizadoEm = AGORA.getTime();
+  // 1 dia depois da proposta (10/11 ainda no futuro): sai do bloco de "acabou de agendar" mas segue ativo
+  const depois = new Date(AGORA.getTime() + 24 * 60 * 60_000);
+  const t = (await contextoDoAgendamento(c.propostas, "c1", depois, sem))!;
+  assertStringIncludes(t, "Agendamento ativo desta cliente");
+  assertStringIncludes(t, "Banho de Lua, terça-feira, 10/11, às 09:00, com Bruna, no nome de Isa, sinal de R$ 6,00");
+  assertStringIncludes(t, "remarcar_ou_cancelar");
+  assertStringIncludes(t, "Não prometa devolução do sinal");
+  // depois do dia do agendamento, não é mais ativo
+  assertEquals(await contextoDoAgendamento(c.propostas, "c1", new Date("2026-11-12T12:00:00Z"), sem), null);
+});
+
+Deno.test("marcar pedido de cancelamento devolve o resumo; sem agendamento ativo devolve null", async () => {
+  const c = cenario();
+  assertEquals(await c.propostas.marcarCancelamentoPedido("c1", "2026-11-07"), null);
+  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
+  await c.comprovante();
+  const r = await c.propostas.marcarCancelamentoPedido("c1", "2026-11-07");
+  assertStringIncludes(r!, "Banho de Lua");
+  assertEquals(c.propostas.cancelamentosPedidos.length, 1);
 });

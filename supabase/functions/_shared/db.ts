@@ -19,10 +19,11 @@ import {
   type ItemHistorico,
 } from "./llm.ts";
 import type { ArmazemSessao, Sessao } from "./disponibilidade.ts";
-import type {
-  Proposta,
-  PropostaRecente,
-  RepositorioPropostas,
+import {
+  resumoDoAgendamento,
+  type Proposta,
+  type PropostaRecente,
+  type RepositorioPropostas,
 } from "./agendamento.ts";
 import type {
   PropostaParaLembrete,
@@ -571,6 +572,38 @@ export class RepositorioPropostasSupabase implements RepositorioPropostas {
         .select("id"),
     ) as unknown[];
     return r.length > 0;
+  }
+
+  async agendadoAtivo(
+    conversaId: string,
+    hoje: string,
+  ): Promise<Proposta | null> {
+    const r = checar(
+      await this.db
+        .from("salao_agendamentos")
+        .select("*")
+        .eq("conversa_id", conversaId)
+        .eq("status", "agendado")
+        .gte("data", hoje)
+        .order("atualizado_em", { ascending: false })
+        .limit(1),
+    ) as LinhaAgendamento[];
+    return r[0] ? paraProposta(r[0]) : null;
+  }
+
+  async marcarCancelamentoPedido(
+    conversaId: string,
+    hoje: string,
+  ): Promise<string | null> {
+    const ativo = await this.agendadoAtivo(conversaId, hoje);
+    if (!ativo) return null;
+    checar(
+      await this.db
+        .from("salao_agendamentos")
+        .update({ cancelamento_pedido_em: new Date().toISOString() })
+        .eq("id", ativo.id),
+    );
+    return resumoDoAgendamento(ativo);
   }
 
   async agendadosDesde(conversaId: string, desde: Date): Promise<number> {

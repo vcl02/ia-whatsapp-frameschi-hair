@@ -16,7 +16,10 @@ import {
   RepositorioPropostasSupabase,
   RepositorioSupabase,
 } from "../_shared/db.ts";
-import { ConsultaMinhaAgenda } from "../_shared/disponibilidade.ts";
+import {
+  ConsultaMinhaAgenda,
+  hojeSaoPaulo,
+} from "../_shared/disponibilidade.ts";
 import {
   AgendadorMinhaAgenda,
   contextoDoAgendamento,
@@ -196,6 +199,13 @@ export async function tratar(req: Request): Promise<Response> {
             conversaId,
             new Date(),
             (ms) => new Promise((r) => setTimeout(r, ms)),
+          )
+      : undefined,
+    registrarPedidoCancelamento: propostas
+      ? (conversaId) =>
+          propostas.marcarCancelamentoPedido(
+            conversaId,
+            hojeSaoPaulo(new Date()),
           )
       : undefined,
     log: logar,

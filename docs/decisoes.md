@@ -119,7 +119,8 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
   (decisão do Victor) e o telefone da conversa, como se a cliente agendasse
   pelo site. Comentário: "Agendado pelo assistente virtual do WhatsApp".
 - Limite: 1 agendamento pelo bot por conversa a cada 24 h. Remarcar/cancelar:
-  humano (o Minha Agenda não deixa a cliente cancelar sozinha).
+  humano (ver a investigação de 2026-11-08 abaixo: a API de cancelamento existe, mas o
+  salão desligou o cancelamento pela cliente).
 - Falha no agendamento => link + passar para humano. `SALAO_AGENDAR=nao`
   desliga só o agendamento.
 
@@ -157,3 +158,25 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
 - Parágrafos (2026-11-08): a regra de "um único parágrafo" foi revertida a pedido do
   Victor. A IA volta a dividir em parágrafos curtos, e a apresentação da primeira
   resposta e a explicação de por que chama a Bruna ficam em parágrafo próprio.
+
+## 2026-11-08 — Cancelamento: investigação da API e cancelamento assistido
+- Lido no código do site online.maapp.com.br (bundle público, só leitura):
+  `PUT /currentUser/appointments/cancel` com `{appointmentId, comments}` e
+  `GET /currentUser/appointments?notFulfilled=&pageNumber=` (lista do usuário logado).
+  O botão "Cancelar Agendamento" do site só aparece se `companyInfo.allowSelfCancel`
+  for verdadeiro (ou houver pagamento antecipado). No perfil da Bruna hoje:
+  `allowSelfCancel = false`, `cancellationAdvanceTimeMinutes = 120` e a política em
+  texto diz "Cancelamentos em no máximo 24 horas antes".
+- NÃO verificado: se o servidor também recusa o cancelamento quando `allowSelfCancel` é
+  falso (nenhuma chamada de cancelamento foi feita). Cancelar exigiria o login do
+  mesmo usuário que agendou; hoje cada agendamento usa um login anônimo novo e ele é
+  descartado, e a resposta do POST de agendamento só é conferida por `status = CREATED`
+  (o site lê `appointments` na resposta; o formato real não foi visto).
+- Decisão: cancelamento assistido, sem cancelar no Minha Agenda. Com agendamento ativo
+  (futuro), a IA confirma qual horário, explica a política, diz que a Bruna cancela e
+  decide sobre o sinal (nunca promete devolução) e passa para a Bruna. O sistema marca o
+  agendamento (`cancelamento_pedido_em`) e põe o resumo dele no aviso por e-mail; o
+  painel mostra "Cancelamento pedido".
+- Cancelamento automático fica para depois e depende de a Bruna ligar o cancelamento
+  pela cliente no Minha Agenda (isso vale também para o site dela) e de guardarmos a
+  sessão de cada agendamento.

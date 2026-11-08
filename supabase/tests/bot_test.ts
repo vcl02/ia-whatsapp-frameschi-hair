@@ -276,3 +276,22 @@ Deno.test("toda passagem para a Bruna explica o motivo à cliente", async () => 
   await casos[1][1](t2);
   assertStringIncludes(t2.enviados[0], casos[1][2]);
 });
+
+Deno.test("pedido de cancelamento: marca o agendamento e manda o resumo no aviso da equipe", async () => {
+  const t = montar({ resposta: "Vou chamar a Bruna porque cancelar é com ela.", passar_para_humano: true, motivo: "Cliente quer cancelar", intencao: "remarcar_ou_cancelar" });
+  let marcou = "";
+  t.deps.registrarPedidoCancelamento = (id) => (marcou = id, Promise.resolve("Corte, quinta-feira, 12/11, às 11:00, com Bruna, no nome de Isa, sinal de R$ 7,00"));
+  assertEquals(await processarMensagem(t.deps, "c1", msg({ texto: "preciso cancelar" })), "passado_para_humano");
+  assertEquals(marcou, "c1");
+  assertStringIncludes(t.avisos[0], "Cliente quer cancelar");
+  assertStringIncludes(t.avisos[0], "Corte, quinta-feira, 12/11");
+  assertStringIncludes(t.avisos[0], "decida sobre o sinal");
+});
+
+Deno.test("outra passagem para a Bruna não marca cancelamento", async () => {
+  const t = montar({ resposta: "x", passar_para_humano: true, motivo: "dúvida", intencao: "duvida" });
+  let chamou = false;
+  t.deps.registrarPedidoCancelamento = () => (chamou = true, Promise.resolve(null));
+  await processarMensagem(t.deps, "c1", msg());
+  assertEquals(chamou, false);
+});

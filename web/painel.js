@@ -325,7 +325,7 @@ async function carregarErros() {
 async function carregarAgendamentos() {
   const { data, error } = await sb
     .from("salao_agendamentos")
-    .select("servico_nome, profissional_nome, data, hora, nome_cliente, status")
+    .select("servico_nome, profissional_nome, data, hora, nome_cliente, status, cancelamento_pedido_em")
     .in("status", ["agendado", "falhou"])
     .order("data", { ascending: false })
     .order("hora", { ascending: false })
@@ -343,7 +343,9 @@ async function carregarAgendamentos() {
               el("div", { class: "titulo" }, a.servico_nome),
               el("div", { class: "sub" }, `${diaDaSemana(a.data)} às ${a.hora} · ${a.profissional_nome} · ${a.nome_cliente}`),
             ),
-            el("span", { class: a.status === "agendado" ? "selo ok" : "selo bad" }, a.status === "agendado" ? "Agendado" : "Falhou"),
+            a.cancelamento_pedido_em
+              ? el("span", { class: "selo warn", title: "A cliente pediu para cancelar ou remarcar. Cancele no Minha Agenda." }, "Cancelamento pedido")
+              : el("span", { class: a.status === "agendado" ? "selo ok" : "selo bad" }, a.status === "agendado" ? "Agendado" : "Falhou"),
           ),
         )
       : [vazio("Nenhum agendamento")]),

@@ -15,6 +15,7 @@ import {
   cabecalhosApi,
   cadastrarConvidada,
   ConsultaMinhaAgenda,
+  hojeSaoPaulo,
   loginAnonimo,
   validarData,
   type Agenda,
@@ -184,6 +185,20 @@ export interface RepositorioPropostas {
   ): Promise<boolean>;
   /** Quantos agendamentos o bot fez nesta conversa desde `desde`. */
   agendadosDesde(conversaId: string, desde: Date): Promise<number>;
+  /** Agendamento mais recente (status "agendado") da conversa com data de `hoje` em diante. */
+  agendadoAtivo(conversaId: string, hoje: string): Promise<Proposta | null>;
+  /**
+   * Marca o agendamento ativo da conversa como "cancelamento pedido" e devolve o resumo
+   * dele (ou null se a conversa não tem agendamento ativo).
+   */
+  marcarCancelamentoPedido(conversaId: string, hoje: string): Promise<string | null>;
+}
+
+/** Resumo de um agendamento em uma linha, para a IA e para a equipe. */
+export function resumoDoAgendamento(p: Proposta): string {
+  const servico = p.servicoNome.replace(/\s*\(a partir de\)/i, "");
+  const sinal = sinalDoServico(p.preco, p.servicoNome)?.texto;
+  return `${servico}, ${dataCurta(p.data)}, às ${p.hora}, com ${p.profissionalNome}, no nome de ${p.nomeCliente}${sinal ? `, sinal de ${sinal}` : ""}`;
 }
 
 // ---------- agendamento no Minha Agenda ----------
@@ -503,7 +518,7 @@ const JANELA_AGENDADO_RECENTE_MS = 3 * 60_000;
  * Se o comprovante está sendo processado, espera terminar (até ~20 s).
  */
 export async function contextoDoAgendamento(
-  repo: Pick<RepositorioPropostas, "recente">,
+  repo: Pick<RepositorioPropostas, "recente" | "agendadoAtivo">,
   conversaId: string,
   agora: Date,
   esperar: (ms: number) => Promise<void>,
@@ -513,6 +528,22 @@ export async function contextoDoAgendamento(
     await esperar(4000);
     r = await repo.recente(conversaId);
   }
+  const partes: string[] = [];
+  const principal = contextoDaProposta(r, agora);
+  if (principal) partes.push(principal);
+  const ativo = await repo.agendadoAtivo(conversaId, hojeSaoPaulo(agora));
+  if (ativo) {
+    partes.push(
+      `Agendamento ativo desta cliente (feito pelo sistema): ${resumoDoAgendamento(ativo)}. Se ela pedir para cancelar ou remarcar: confirme com ela que é esse horário, explique a política de cancelamento do salão (está nas regras do agendamento) e diga que a Bruna cuida do cancelamento e do sinal. Não prometa devolução do sinal. Marque passar_para_humano = true e intencao = remarcar_ou_cancelar, e escreva no "motivo" o pedido dela.`,
+    );
+  }
+  return partes.length ? partes.join("\n") : null;
+}
+
+function contextoDaProposta(
+  r: PropostaRecente | null,
+  agora: Date,
+): string | null {
   if (!r) return null;
   const servico = r.servicoNome.replace(/\s*\(a partir de\)/i, "");
   const resumo = `${servico}, ${r.data} às ${r.hora} com ${r.profissionalNome}, no nome de ${r.nomeCliente}`;
