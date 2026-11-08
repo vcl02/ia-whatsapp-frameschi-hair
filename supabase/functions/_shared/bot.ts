@@ -118,17 +118,23 @@ async function marcarEAvisar(deps: DepsBot, c: Conversa, motivo: string) {
   }
 }
 
+/**
+ * `motivo` é para a equipe (e-mail e painel). `explicacao` é a razão em linguagem
+ * simples que a cliente lê antes do aviso de que a Bruna vai responder.
+ */
 async function passarParaHumano(
   deps: DepsBot,
   c: Conversa,
   motivo: string,
+  explicacao?: string,
 ): Promise<Resultado> {
   // Pausa antes de enviar: se o envio falhar, o bot já não volta a responder.
   await marcarEAvisar(deps, c, motivo);
+  const passagem = escolher(deps.salao.mensagensPassagemHumano, deps.aleatorio);
   const envio = await enviarComApresentacao(
     deps,
     c,
-    escolher(deps.salao.mensagensPassagemHumano, deps.aleatorio),
+    explicacao ? `${explicacao} ${passagem}` : passagem,
   );
   deps.log("passado_para_humano", {
     conversa: c.id,
@@ -157,7 +163,12 @@ export async function processarMensagem(
       r = await deps.receberComprovante(c, msg);
     } catch (e) {
       deps.log("erro_comprovante", { conversa: c.id, erro: String(e) });
-      return passarParaHumano(deps, c, "falha ao processar o comprovante");
+      return passarParaHumano(
+        deps,
+        c,
+        "falha ao processar o comprovante",
+        "Recebi seu comprovante, mas deu um problema no sistema na hora de processar.",
+      );
     }
     if (r?.acao === "ignorar") return "ignorado";
     if (r?.acao === "responder") {
@@ -181,10 +192,16 @@ export async function processarMensagem(
       deps,
       c,
       `mensagem do tipo "${msg.tipo}" (a IA só lê texto)`,
+      "Por aqui eu só consigo ler texto, então não consigo ver o que você mandou.",
     );
   }
   if (PEDIDO_HUMANO.test(msg.texto)) {
-    return passarParaHumano(deps, c, "cliente pediu atendimento humano");
+    return passarParaHumano(
+      deps,
+      c,
+      "cliente pediu atendimento humano",
+      "Você pediu para falar com uma pessoa.",
+    );
   }
   const servicos = await deps.repo.servicosAtivos();
   const salao = comInfoEspelhada(deps.salao, await deps.repo.infoSalao());
@@ -194,6 +211,7 @@ export async function processarMensagem(
       deps,
       c,
       `dados do salão incompletos: ${faltando.join(", ")}`,
+      "Não estou conseguindo acessar as informações do salão agora.",
     );
   }
 
@@ -207,6 +225,7 @@ export async function processarMensagem(
       deps,
       c,
       `limite de ${cfg.limiteConversaHora} respostas automáticas por hora nesta conversa`,
+      "Já trocamos bastante mensagem por aqui na última hora.",
     );
   }
   if (
@@ -217,6 +236,7 @@ export async function processarMensagem(
       deps,
       c,
       `limite diário de ${cfg.limiteGlobalDia} respostas automáticas atingido`,
+      "Hoje estou com muitas conversas ao mesmo tempo.",
     );
   }
 
@@ -239,7 +259,12 @@ export async function processarMensagem(
     });
   } catch (e) {
     deps.log("erro_llm", { conversa: c.id, erro: String(e) });
-    return passarParaHumano(deps, c, "falha ao gerar resposta automática");
+    return passarParaHumano(
+      deps,
+      c,
+      "falha ao gerar resposta automática",
+      "Tive um problema aqui para te responder.",
+    );
   }
 
   // Confere de novo: alguém pode ter pausado enquanto a LLM respondia.

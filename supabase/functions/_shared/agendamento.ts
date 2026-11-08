@@ -419,7 +419,7 @@ export async function receberComprovante(
   if (proposta.expiraEm < agora().getTime()) {
     await deps.propostas.mudarStatus(proposta.id, "proposto", "expirado");
     return chamarBruna(
-      "Recebi seu comprovante! 💖 Como o tempo da reserva acabou, vou chamar a Bruna para conferir o horário com você.",
+      "Recebi seu comprovante! 💖 Como o tempo da reserva (30 minutos) já tinha acabado, eu não consigo agendar sozinha, então vou chamar a Bruna para conferir o horário com você.",
       "comprovante recebido depois de a reserva vencer",
     );
   }
@@ -429,7 +429,7 @@ export async function receberComprovante(
     (await deps.propostas.agendadosDesde(ctx.conversaId, desde)) >= MAX_AGENDAMENTOS_DIA
   ) {
     return chamarBruna(
-      "Recebi seu comprovante! 💖 Vou chamar a Bruna para te ajudar com esse novo horário.",
+      "Recebi seu comprovante! 💖 Como já existe um agendamento feito por aqui para você nas últimas 24 horas, eu só consigo agendar um por dia, então vou chamar a Bruna para ver esse novo horário com você.",
       "comprovante recebido, mas esta conversa já teve um agendamento hoje",
     );
   }
@@ -449,7 +449,7 @@ export async function receberComprovante(
         "horário ocupado antes do comprovante",
       );
       return chamarBruna(
-        "Recebi seu comprovante, mas esse horário foi ocupado antes. 💖 A Bruna vai falar com você sobre o Pix e um novo horário.",
+        "Recebi seu comprovante, mas esse horário foi ocupado por outra pessoa antes de eu agendar. 💖 Vou chamar a Bruna para falar com você sobre o Pix e um novo horário.",
         "horário ocupado ao receber o comprovante",
       );
     }
@@ -466,7 +466,7 @@ export async function receberComprovante(
     await deps.propostas.mudarStatus(proposta.id, "agendando", "falhou", String(e));
     deps.log("erro_agendamento", { conversa: ctx.conversaId, erro: String(e) });
     return chamarBruna(
-      "Recebi seu comprovante! 💖 Tive um problema para agendar aqui, então a Bruna vai finalizar com você.",
+      "Recebi seu comprovante! 💖 Deu um problema no sistema na hora de agendar, então vou chamar a Bruna para finalizar com você.",
       "falha ao agendar depois do comprovante",
     );
   }

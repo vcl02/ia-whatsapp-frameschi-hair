@@ -94,7 +94,8 @@ Deno.test("áudio passa para humano, avisa a equipe e não chama a LLM", async (
   assertEquals(await processarMensagem(t.deps, "c1", msg({ tipo: "audio", texto: null })), "passado_para_humano");
   assertEquals(t.llm(), 0);
   assertEquals(t.repo.c.botPausado, true);
-  assertEquals(SALAO.mensagensPassagemHumano.includes(t.enviados[0]), true);
+  assertStringIncludes(t.enviados[0], "só consigo ler texto");
+  assertEquals(SALAO.mensagensPassagemHumano.some((m) => t.enviados[0].endsWith(m)), true);
   assertEquals(t.avisos.length, 1);
 });
 
@@ -261,4 +262,17 @@ Deno.test("resposta vazia passando para humano: usa a mensagem de passagem", asy
   const t = montar({ resposta: "", passar_para_humano: true, motivo: "x", intencao: "outro" });
   assertEquals(await processarMensagem(t.deps, "c1", msg()), "passado_para_humano");
   assertEquals(t.enviados.length, 1);
+});
+
+Deno.test("toda passagem para a Bruna explica o motivo à cliente", async () => {
+  const casos: Array<[string, (t: ReturnType<typeof montar>) => Promise<unknown>, string]> = [
+    ["pediu pessoa", (t) => processarMensagem(t.deps, "c1", msg({ texto: "quero falar com uma atendente" })), "pediu para falar com uma pessoa"],
+    ["falha da IA", (t) => processarMensagem(t.deps, "c1", msg()), "problema aqui para te responder"],
+  ];
+  const t1 = montar({ resposta: "x", passar_para_humano: false, motivo: "", intencao: "outro" });
+  await casos[0][1](t1);
+  assertStringIncludes(t1.enviados[0].toLowerCase(), casos[0][2].toLowerCase());
+  const t2 = montar(new Error("api fora"));
+  await casos[1][1](t2);
+  assertStringIncludes(t2.enviados[0], casos[1][2]);
 });

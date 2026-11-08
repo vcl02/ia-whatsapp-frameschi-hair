@@ -24,6 +24,7 @@ Deno.test("prompt contém só os dados configurados", () => {
   assertStringIncludes(s, "Nunca invente");
   assertStringIncludes(s, "Seu nome é Lia");
   assertStringIncludes(s, "UM único parágrafo");
+  assertStringIncludes(s, "POR QUE está chamando a Bruna");
 });
 
 Deno.test("valida o formato da decisão", () => {
