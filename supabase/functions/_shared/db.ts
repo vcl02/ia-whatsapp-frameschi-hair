@@ -3,6 +3,7 @@
 import { createClient, type SupabaseClient } from "./deps.ts";
 import type {
   EcoEnviado,
+  ListasNumeros,
   MensagemRecebida,
   ResultadoEnvio,
   StatusRecebido,
@@ -37,10 +38,22 @@ function checar<T>(r: { data: T; error: unknown }): T {
 export class RepositorioSupabase implements Repositorio {
   constructor(private db: SupabaseClient) {}
 
-  /** Grava a mensagem recebida. `nova` = false quando a Meta reenviou a mesma. */
+  /**
+   * Grava a mensagem recebida. `nova` = false quando a Meta reenviou a mesma.
+   * Conversa nova nasce com a IA pausada se o botão geral estiver desligado
+   * (`iaLigadaParaNovas`); conversa que já existe nunca é afetada por ele.
+   */
   async registrarEntrada(
     m: MensagemRecebida,
+    iaLigadaParaNovas = true,
   ): Promise<{ conversaId: string; nova: boolean }> {
+    const existente = checar(
+      await this.db
+        .from("salao_conversas")
+        .select("id")
+        .eq("wa_id", m.waId)
+        .maybeSingle(),
+    ) as { id: string } | null;
     const conversa = checar(
       await this.db
         .from("salao_conversas")
@@ -50,6 +63,7 @@ export class RepositorioSupabase implements Repositorio {
             ...(m.nomePerfil ? { nome_perfil: m.nomePerfil } : {}),
             ultimo_inbound_em: m.recebidaEm.toISOString(),
             atualizado_em: new Date().toISOString(),
+            ...(existente ? {} : { bot_pausado: !iaLigadaParaNovas }),
           },
           { onConflict: "wa_id" },
         )
@@ -96,8 +110,8 @@ export class RepositorioSupabase implements Repositorio {
   }
 
   /**
-   * Interruptor global. Se a tabela ainda não existir (migration não aplicada),
-   * a IA segue ligada; qualquer outro erro propaga e nada é respondido.
+   * Botão geral da IA (vale só para conversas novas). Se a tabela ainda não
+   * existir, segue ligada; qualquer outro erro propaga e nada é respondido.
    */
   async iaAtiva(): Promise<boolean> {
     const { data, error } = await this.db
@@ -111,6 +125,32 @@ export class RepositorioSupabase implements Repositorio {
       throw error;
     }
     return data?.ia_ativa !== false;
+  }
+
+  /** Listas de teste e de familiares (tabela salao_numeros, editada no painel). */
+  async listasNumeros(): Promise<ListasNumeros> {
+    const { data, error } = await this.db
+      .from("salao_numeros")
+      .select("wa_id, lista");
+    if (error) {
+      // Migration ainda não aplicada: mantém o comportamento anterior (secret), sem derrubar o webhook.
+      const code = (error as { code?: string }).code;
+      if (code === "42P01" || code === "PGRST205") {
+        const antigos = (Deno.env.get("SALAO_SO_RESPONDER_PARA") ?? "")
+          .split(",")
+          .map((s) => s.replace(/\D/g, ""))
+          .filter(Boolean);
+        return { teste: new Set(antigos), familiar: new Set() };
+      }
+      throw error;
+    }
+    const r = data as { wa_id: string; lista: string }[];
+    return {
+      teste: new Set(r.filter((x) => x.lista === "teste").map((x) => x.wa_id)),
+      familiar: new Set(
+        r.filter((x) => x.lista === "familiar").map((x) => x.wa_id),
+      ),
+    };
   }
 
   async conversa(id: string): Promise<Conversa> {

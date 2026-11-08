@@ -51,8 +51,8 @@ function desenharIA(ctrl) {
   hero.classList.toggle("ligada", iaAtiva);
   hero.classList.toggle("desligada", !iaAtiva);
   $("iaEstado").textContent = iaAtiva
-    ? "Respondendo as clientes no WhatsApp."
-    : "Nenhuma resposta automática está sendo enviada.";
+    ? "Novas conversas começam com a IA ligada. As conversas já iniciadas não mudam."
+    : "Novas conversas começam com a IA pausada. As conversas já iniciadas não mudam.";
   $("iaMeta").textContent = ctrl.atualizado_em ? `Última mudança: ${quando(ctrl.atualizado_em)}` : "";
   const chave = $("iaChave");
   chave.classList.toggle("ligada", iaAtiva);
@@ -67,7 +67,7 @@ function desenharIA(ctrl) {
 $("iaChave").onclick = async () => {
   if (iaAtiva === null) return;
   const novo = !iaAtiva;
-  if (!novo && !confirm("Desligar a IA? Nenhuma cliente receberá resposta automática até você ligar de novo.")) return;
+  if (!novo && !confirm("Desligar a IA para novas conversas? As conversas já iniciadas continuam como estão.")) return;
   const chave = $("iaChave");
   chave.disabled = true;
   const { error } = await sb.from("salao_controle").update({ ia_ativa: novo }).eq("id", 1);
@@ -108,31 +108,50 @@ async function carregarNumeros() {
   );
 }
 
-// ---------- conversas que precisam de atenção ----------
-async function retomar(id) {
-  const { error } = await sb
-    .from("salao_conversas")
-    .update({ bot_pausado: false, precisa_humano: false, motivo_humano: null })
-    .eq("id", id);
-  if (error) return alert("Não consegui retomar: " + error.message);
+// ---------- conversas ----------
+function iconePower() {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  for (const d of ["M12 3v8", "M17.7 6.3a8 8 0 1 1-11.4 0"]) {
+    const p = document.createElementNS(ns, "path");
+    p.setAttribute("d", d);
+    svg.append(p);
+  }
+  return svg;
+}
+
+async function mudarConversa(c) {
+  const mudanca = c.bot_pausado
+    ? { bot_pausado: false, precisa_humano: false, motivo_humano: null }
+    : { bot_pausado: true };
+  const { error } = await sb.from("salao_conversas").update(mudanca).eq("id", c.id);
+  if (error) return alert("Não consegui mudar: " + error.message);
   await carregar();
 }
 
-async function carregarAtencao() {
+async function carregarConversas() {
   const { data, error } = await sb
     .from("salao_conversas")
     .select("id, wa_id, nome_perfil, bot_pausado, precisa_humano, atualizado_em")
-    .or("precisa_humano.eq.true,bot_pausado.eq.true")
     .order("precisa_humano", { ascending: false })
     .order("atualizado_em", { ascending: false })
-    .limit(30);
+    .limit(50);
   if (error) return falha(error);
-  $("atencaoN").textContent = data.length ? String(data.length) : "";
-  $("atencao").replaceChildren(
+  const pausadas = data.filter((c) => c.bot_pausado).length;
+  $("conversasN").textContent = data.length ? `${data.length}${pausadas ? ` · ${pausadas} pausada(s)` : ""}` : "";
+  $("conversas").replaceChildren(
     ...(data.length
       ? data.map((c) => {
-          const botao = el("button", { class: "btn pequeno" }, "Retomar IA");
-          botao.onclick = () => retomar(c.id);
+          const ligada = !c.bot_pausado;
+          const botao = el("button", {
+            class: `icone-ia ${ligada ? "on" : "off"}`,
+            title: ligada ? "IA ligada nesta conversa. Clique para pausar." : "IA pausada nesta conversa. Clique para retomar.",
+            "aria-label": ligada ? "Pausar a IA desta conversa" : "Retomar a IA desta conversa",
+          });
+          botao.append(iconePower());
+          botao.onclick = () => mudarConversa(c);
           return el(
             "div",
             { class: "linha" },
@@ -142,13 +161,81 @@ async function carregarAtencao() {
               el("div", { class: "titulo" }, c.nome_perfil || telefone(c.wa_id)),
               el("div", { class: "sub" }, `${c.nome_perfil ? telefone(c.wa_id) + " · " : ""}${quando(c.atualizado_em)}`),
             ),
-            el("span", { class: c.precisa_humano ? "selo warn" : "selo gold" }, c.precisa_humano ? "Precisa de você" : "IA pausada"),
+            c.precisa_humano ? el("span", { class: "selo warn" }, "Precisa de você") : null,
             botao,
           );
         })
-      : [vazio("Nenhuma conversa esperando por você.")]),
+      : [vazio("Nenhuma conversa ainda.")]),
   );
 }
+
+// ---------- quem a IA atende (listas) ----------
+function normalizarNumero(valor) {
+  const d = valor.replace(/\D/g, "");
+  return d.length === 10 || d.length === 11 ? `55${d}` : d;
+}
+
+let listaTeste = [];
+let listaFamiliar = [];
+
+function desenharModo() {
+  $("modoLista").textContent = listaTeste.length
+    ? `Modo teste: a IA atende só os ${listaTeste.length} número(s) da lista de teste.`
+    : listaFamiliar.length
+      ? `Sem lista de teste: a IA atende todos os números, menos os ${listaFamiliar.length} da lista de familiares.`
+      : "Sem listas: a IA atende todos os números.";
+}
+
+function desenharLista(destino, tipo, itens) {
+  $(destino).replaceChildren(
+    ...(itens.length
+      ? itens.map((n) => {
+          const x = el("button", { class: "btn pequeno x", title: "Remover da lista", "aria-label": "Remover da lista" }, "×");
+          x.onclick = () => removerNumero(tipo, n.wa_id, itens.length);
+          return el(
+            "div",
+            { class: "linha" },
+            el("div", { class: "principal" }, el("div", { class: "titulo" }, telefone(n.wa_id)), n.nome ? el("div", { class: "sub" }, n.nome) : null),
+            x,
+          );
+        })
+      : [vazio("Ninguém na lista.")]),
+  );
+}
+
+async function carregarListas() {
+  const { data, error } = await sb.from("salao_numeros").select("wa_id, lista, nome").order("criado_em");
+  if (error) {
+    $("modoLista").textContent = "Não consegui ler as listas. Confira se a migration dos números foi aplicada.";
+    return falha(error);
+  }
+  listaTeste = data.filter((n) => n.lista === "teste");
+  listaFamiliar = data.filter((n) => n.lista === "familiar");
+  desenharModo();
+  desenharLista("listaTeste", "teste", listaTeste);
+  desenharLista("listaFamiliar", "familiar", listaFamiliar);
+}
+
+async function adicionarNumero(tipo, campoNum, campoNome) {
+  const wa = normalizarNumero($(campoNum).value);
+  if (!/^\d{10,15}$/.test(wa)) return alert("Número inválido. Use DDD + número, por exemplo (11) 99999-9999.");
+  const nome = $(campoNome).value.trim() || null;
+  const { error } = await sb.from("salao_numeros").insert({ wa_id: wa, lista: tipo, nome });
+  if (error) return alert(error.code === "23505" ? "Esse número já está nessa lista." : "Não consegui adicionar: " + error.message);
+  $(campoNum).value = "";
+  $(campoNome).value = "";
+  await carregarListas();
+}
+
+async function removerNumero(tipo, wa, total) {
+  if (tipo === "teste" && total === 1 && !confirm("A lista de teste vai ficar vazia: a IA passa a atender TODOS os números (menos os familiares). Continuar?")) return;
+  const { error } = await sb.from("salao_numeros").delete().eq("wa_id", wa).eq("lista", tipo);
+  if (error) return alert("Não consegui remover: " + error.message);
+  await carregarListas();
+}
+
+$("formTeste").onsubmit = (e) => (e.preventDefault(), adicionarNumero("teste", "numTeste", "nomeTeste"));
+$("formFamiliar").onsubmit = (e) => (e.preventDefault(), adicionarNumero("familiar", "numFamiliar", "nomeFamiliar"));
 
 // ---------- erros ----------
 function detalheDoEvento(bruto) {
@@ -245,8 +332,17 @@ async function carregarAgendamentos() {
 }
 
 async function carregar() {
-  await Promise.allSettled([carregarIA(), carregarNumeros(), carregarAtencao(), carregarErros(), carregarAgendamentos()]);
+  await Promise.allSettled([carregarIA(), carregarNumeros(), carregarConversas(), carregarErros(), carregarAgendamentos(), carregarListas()]);
 }
+
+$("btnAtualizar").onclick = async () => {
+  const b = $("btnAtualizar");
+  b.disabled = true;
+  b.classList.add("girando");
+  await carregar();
+  b.disabled = false;
+  b.classList.remove("girando");
+};
 
 // ---------- sessão ----------
 $("login").onsubmit = async (e) => {
@@ -265,6 +361,7 @@ sb.auth.onAuthStateChange((_ev, sessao) => {
   $("login").classList.toggle("oculto", logado);
   $("app").classList.toggle("oculto", !logado);
   $("btnSair").classList.toggle("oculto", !logado);
+  $("btnAtualizar").classList.toggle("oculto", !logado);
   clearInterval(timer);
   if (logado) {
     carregar();

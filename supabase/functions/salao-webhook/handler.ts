@@ -5,9 +5,8 @@
 import { assinaturaValida } from "../_shared/assinatura.ts";
 import {
   enviarTexto,
-  filtrarPorPermitidos,
+  filtrarPorListas,
   lerEventos,
-  lerPermitidos,
   type ConfigWhatsApp,
 } from "../_shared/whatsapp.ts";
 import {
@@ -88,13 +87,15 @@ export async function tratar(req: Request): Promise<Response> {
     phoneNumberId: exigirEnv("SALAO_WHATSAPP_PHONE_NUMBER_ID"),
     graphApiVersion: exigirEnv("SALAO_GRAPH_API_VERSION"),
   };
-  // Fase de testes: se SALAO_SO_RESPONDER_PARA tiver números, nada de quem está
-  // fora da lista é gravado nem respondido (o número é de uso pessoal).
-  const { eventos, descartados } = filtrarPorPermitidos(
-    lerEventos(payload, wa.phoneNumberId),
-    lerPermitidos(Deno.env.get("SALAO_SO_RESPONDER_PARA")),
-  );
   const db = clienteServico();
+  const repo = new RepositorioSupabase(db);
+  // Quem a IA atende vem das listas do painel (teste e familiares); quem ela não
+  // atende não é gravado nem respondido. Sem conseguir ler as listas, nada é respondido.
+  const { eventos, descartados } = filtrarPorListas(
+    lerEventos(payload, wa.phoneNumberId),
+    await repo.listasNumeros(),
+  );
+  const iaLigadaParaNovas = await repo.iaAtiva();
   const logar = (evento: string, dados: Record<string, unknown> = {}) => {
     log(evento, dados);
     if (!EVENTO_DE_ERRO.test(evento)) return;
@@ -108,7 +109,6 @@ export async function tratar(req: Request): Promise<Response> {
       }),
     );
   };
-  const repo = new RepositorioSupabase(db);
   // Consulta e agendamento no Minha Agenda: só ligam com a chave do Firebase configurada.
   // O agendamento pode ser desligado à parte com SALAO_AGENDAR=nao.
   const chaveFirebase = Deno.env.get("SALAO_MA_FIREBASE_KEY");
@@ -164,7 +164,10 @@ export async function tratar(req: Request): Promise<Response> {
   };
 
   for (const m of eventos.mensagens) {
-    const { conversaId, nova } = await repo.registrarEntrada(m);
+    const { conversaId, nova } = await repo.registrarEntrada(
+      m,
+      iaLigadaParaNovas,
+    );
     if (!nova) continue; // reenvio da Meta: já tratado
     emSegundoPlano(
       processarMensagem(deps, conversaId, m).then((r) =>

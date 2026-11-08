@@ -111,6 +111,19 @@
       .btn:hover {
         background: var(--surface-2);
       }
+      .btn.atualizar.girando span {
+        display: inline-block;
+        animation: gira 0.8s linear infinite;
+      }
+      @keyframes gira {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .topo .acoes {
+        display: flex;
+        gap: 8px;
+      }
       .btn.pequeno {
         padding: 5px 11px;
         font-size: 13px;
@@ -267,6 +280,77 @@
         grid-template-columns: repeat(4, 1fr);
         gap: 16px;
       }
+      .icone-ia {
+        flex: none;
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        padding: 0;
+        display: inline-grid;
+        place-items: center;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        transition: filter 0.15s;
+      }
+      .icone-ia svg {
+        width: 18px;
+        height: 18px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .icone-ia.on {
+        color: var(--ok);
+        background: var(--ok-soft);
+        border-color: var(--ok);
+      }
+      .icone-ia.off {
+        color: var(--bad);
+        background: var(--bad-soft);
+        border-color: var(--bad);
+      }
+      .icone-ia:hover:not(:disabled) {
+        filter: brightness(1.2);
+      }
+      .ajuda {
+        color: var(--muted);
+        font-size: 13px;
+        margin: -6px 0 12px;
+      }
+      .modo {
+        font-size: 13.5px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: var(--gold-soft);
+        color: var(--gold);
+        margin-bottom: 14px;
+      }
+      .listas {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      .listas h3 {
+        font-size: 14px;
+        margin-bottom: 4px;
+      }
+      .adicionar {
+        display: grid;
+        grid-template-columns: 1.3fr 1fr auto;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .adicionar input {
+        padding: 8px 10px;
+        font-size: 14px;
+        min-width: 0;
+      }
+      .btn.x {
+        padding: 2px 9px;
+        line-height: 1.3;
+      }
       .numeros.cinco {
         grid-template-columns: repeat(5, 1fr);
       }
@@ -378,6 +462,15 @@
         .hero h2 {
           font-size: 17px;
         }
+        .listas {
+          grid-template-columns: 1fr;
+        }
+        .adicionar {
+          grid-template-columns: 1fr 1fr;
+        }
+        .adicionar button {
+          grid-column: 1 / -1;
+        }
       }
     </style>
   </head>
@@ -388,7 +481,10 @@
         <h1>Painel da IA</h1>
         <p>Bruna Frameschi Hair</p>
       </div>
-      <button id="btnSair" class="btn oculto">Sair</button>
+      <div class="acoes">
+        <button id="btnAtualizar" class="btn atualizar oculto" title="Atualizar os dados"><span>↻</span> Atualizar</button>
+        <button id="btnSair" class="btn oculto">Sair</button>
+      </div>
     </header>
 
     <form id="login">
@@ -402,7 +498,7 @@
     <main id="app" class="oculto">
       <section id="hero" class="card hero">
         <div class="texto">
-          <h2>IA de atendimento</h2>
+          <h2>IA nas novas conversas</h2>
           <p id="iaEstado" class="estado">Carregando…</p>
           <p id="iaMeta" class="meta"></p>
         </div>
@@ -411,20 +507,47 @@
 
       <section class="numeros" id="numeros"></section>
 
-      <div class="grade">
-        <section class="card">
-          <h2>Precisam de você <span id="atencaoN" class="contagem"></span></h2>
-          <div id="atencao" class="lista"></div>
-        </section>
-        <section class="card">
-          <h2>Erros <span id="errosN" class="contagem"></span></h2>
-          <div id="erros" class="lista"></div>
-        </section>
-      </div>
+      <section class="card">
+        <h2>Conversas <span id="conversasN" class="contagem"></span></h2>
+        <p class="ajuda">O ícone de cada conversa mostra a IA dela: verde = ligada, vermelho = pausada. Clique para pausar ou retomar. Vale só para aquela conversa e não depende do botão geral.</p>
+        <div id="conversas" class="lista"></div>
+      </section>
+
+      <section class="card">
+        <h2>Erros <span id="errosN" class="contagem"></span></h2>
+        <div id="erros" class="lista"></div>
+      </section>
 
       <section class="card">
         <h2>Agendamentos feitos pela IA</h2>
         <div id="agendamentos" class="lista"></div>
+      </section>
+
+      <section class="card">
+        <h2>Quem a IA atende</h2>
+        <p id="modoLista" class="modo"></p>
+        <div class="listas">
+          <div>
+            <h3>Lista de teste</h3>
+            <p class="ajuda">Se tiver números aqui, a IA atende só eles (mesmo que também estejam em familiares). Vazia: atende todos, menos os familiares.</p>
+            <div id="listaTeste" class="lista"></div>
+            <form id="formTeste" class="adicionar">
+              <input id="numTeste" inputmode="tel" placeholder="(11) 99999-9999" required />
+              <input id="nomeTeste" placeholder="Nome (opcional)" maxlength="60" />
+              <button class="btn ouro">Adicionar</button>
+            </form>
+          </div>
+          <div>
+            <h3>Familiares e outros</h3>
+            <p class="ajuda">A IA nunca responde a estes números, e as mensagens deles nem são guardadas.</p>
+            <div id="listaFamiliar" class="lista"></div>
+            <form id="formFamiliar" class="adicionar">
+              <input id="numFamiliar" inputmode="tel" placeholder="(11) 99999-9999" required />
+              <input id="nomeFamiliar" placeholder="Nome (opcional)" maxlength="60" />
+              <button class="btn ouro">Adicionar</button>
+            </form>
+          </div>
+        </div>
       </section>
 
       <p class="rodape">

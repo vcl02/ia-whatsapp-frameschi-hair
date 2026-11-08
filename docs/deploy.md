@@ -6,7 +6,7 @@
   `salao-responder` (v1, com JWT) publicadas no hub.
 - 2026-11-06: secrets `SALAO_*` cadastrados, webhook assinado na Meta, primeira
   conversa de teste entregue e lida. `salao-webhook` republicada com a lista
-  `SALAO_SO_RESPONDER_PARA` (só a Isa responde na fase de testes).
+  `SALAO_SO_RESPONDER_PARA` (legado; a lista de teste e a de familiares agora são editadas no painel, tabela `salao_numeros`).
 - 2026-11-07: espelho do Minha Agenda no ar (`salao-sincronizar`, pg_cron
   diário 09:07 UTC). Primeira sincronização: 64 serviços, horário e regras.
   `salao-webhook` lê horário/regras do banco. Revoke da função de gatilho aplicado.
