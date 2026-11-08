@@ -137,6 +137,7 @@ async function carregarConversas() {
     .limit(50);
   if (error) return falha(error);
   const pausadas = data.filter((c) => c.bot_pausado).length;
+  $("avisoConversas").classList.toggle("oculto", !data.some((c) => c.precisa_humano));
   $("conversasN").textContent = data.length ? `${data.length} ${data.length === 1 ? "conversa" : "conversas"}` : "";
   const ativas = data.length - pausadas;
   $("ativasN").textContent = ativas ? `${ativas} ${ativas === 1 ? "ativa" : "ativas"}` : "";
@@ -154,14 +155,13 @@ async function carregarConversas() {
           botao.onclick = () => mudarConversa(c);
           return el(
             "div",
-            { class: "linha" },
+            { class: "linha" + (c.precisa_humano ? " atencao" : "") },
             el(
               "div",
               { class: "principal" },
               el("div", { class: "titulo" }, c.nome_perfil || telefone(c.wa_id)),
               el("div", { class: "sub" }, `${c.nome_perfil ? telefone(c.wa_id) + " · " : ""}${quando(c.atualizado_em)}`),
             ),
-            c.precisa_humano ? el("span", { class: "selo warn" }, "Precisa de você") : null,
             botao,
           );
         })
