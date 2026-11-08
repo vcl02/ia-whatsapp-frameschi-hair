@@ -91,9 +91,10 @@ export async function tratar(req: Request): Promise<Response> {
   const repo = new RepositorioSupabase(db);
   // Quem a IA atende vem das listas do painel (teste e familiares); quem ela não
   // atende não é gravado nem respondido. Sem conseguir ler as listas, nada é respondido.
+  const listas = await repo.listasNumeros();
   const { eventos, descartados } = filtrarPorListas(
     lerEventos(payload, wa.phoneNumberId),
-    await repo.listasNumeros(),
+    listas,
   );
   const iaLigadaParaNovas = await repo.iaAtiva();
   const logar = (evento: string, dados: Record<string, unknown> = {}) => {
@@ -124,7 +125,8 @@ export async function tratar(req: Request): Promise<Response> {
     if (s.status === "failed")
       logar("status_falha", { wamid: s.wamid, erros: s.erros });
   }
-  for (const e of eventos.ecos) await repo.registrarEco(e);
+  for (const e of eventos.ecos)
+    await repo.registrarEco(e, listas.teste.has(e.para));
 
   const deps: DepsBot = {
     repo,
@@ -167,6 +169,7 @@ export async function tratar(req: Request): Promise<Response> {
     const { conversaId, nova } = await repo.registrarEntrada(
       m,
       iaLigadaParaNovas,
+      listas.teste.has(m.waId),
     );
     if (!nova) continue; // reenvio da Meta: já tratado
     emSegundoPlano(

@@ -49,18 +49,21 @@ export class RepositorioSupabase implements Repositorio {
    * Grava a mensagem recebida. `nova` = false quando a Meta reenviou a mesma.
    * Conversa nova nasce com a IA pausada se o botão geral estiver desligado
    * (`iaLigadaParaNovas`); conversa que já existe nunca é afetada por ele.
+   * Número de teste com a IA pausada: a mensagem fica fora do contexto da IA.
    */
   async registrarEntrada(
     m: MensagemRecebida,
     iaLigadaParaNovas = true,
+    numeroDeTeste = false,
   ): Promise<{ conversaId: string; nova: boolean }> {
     const existente = checar(
       await this.db
         .from("salao_conversas")
-        .select("id")
+        .select("id, bot_pausado")
         .eq("wa_id", m.waId)
         .maybeSingle(),
-    ) as { id: string } | null;
+    ) as { id: string; bot_pausado: boolean } | null;
+    const pausada = existente ? existente.bot_pausado : !iaLigadaParaNovas;
     const conversa = checar(
       await this.db
         .from("salao_conversas")
@@ -89,6 +92,7 @@ export class RepositorioSupabase implements Repositorio {
             wamid: m.wamid,
             tipo: m.tipo,
             texto: m.texto,
+            fora_contexto: numeroDeTeste && pausada,
             criado_em: m.recebidaEm.toISOString(),
           },
           { onConflict: "wamid", ignoreDuplicates: true },
@@ -274,7 +278,7 @@ export class RepositorioSupabase implements Repositorio {
    * Mensagem enviada pelo app do celular (coexistência): registra como humana
    * e pausa o bot, porque alguém assumiu a conversa.
    */
-  async registrarEco(e: EcoEnviado): Promise<void> {
+  async registrarEco(e: EcoEnviado, numeroDeTeste = false): Promise<void> {
     // Se o wamid já existe, a mensagem foi enviada por nós (bot ou tela): ignora.
     const ja = checar(
       await this.db
@@ -308,6 +312,7 @@ export class RepositorioSupabase implements Repositorio {
           tipo: e.tipo,
           texto: e.texto,
           status: "enviada_pelo_app",
+          fora_contexto: numeroDeTeste,
           criado_em: e.enviadaEm.toISOString(),
         },
         { onConflict: "wamid", ignoreDuplicates: true },
@@ -337,6 +342,7 @@ export class RepositorioSupabase implements Repositorio {
         .from("salao_mensagens")
         .select("autor, texto, tipo")
         .eq("conversa_id", conversaId)
+        .eq("fora_contexto", false)
         .order("criado_em", { ascending: false })
         .limit(limite),
     ) as {
