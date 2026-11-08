@@ -117,6 +117,28 @@ function iconePower() {
   return svg;
 }
 
+function iconeLapis() {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  for (const d of ["M12 20h9", "M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"]) {
+    const p = document.createElementNS(ns, "path");
+    p.setAttribute("d", d);
+    svg.append(p);
+  }
+  return svg;
+}
+
+async function renomearConversa(c, atual) {
+  const novo = prompt("Nome da cliente (deixe vazio para usar o nome do WhatsApp):", atual || "");
+  if (novo === null) return;
+  const nome = novo.trim().slice(0, 80) || null;
+  const { error } = await sb.from("salao_conversas").update({ nome_cliente: nome }).eq("id", c.id);
+  if (error) return alert("Não consegui salvar o nome: " + error.message);
+  await carregarConversas();
+}
+
 async function mudarConversa(c) {
   const mudanca = c.bot_pausado
     ? { bot_pausado: false, precisa_humano: false, motivo_humano: null }
@@ -129,7 +151,7 @@ async function mudarConversa(c) {
 async function carregarConversas() {
   const { data, error } = await sb
     .from("salao_conversas")
-    .select("id, wa_id, nome_perfil, bot_pausado, precisa_humano, atualizado_em")
+    .select("id, wa_id, nome_perfil, nome_cliente, bot_pausado, precisa_humano, atualizado_em")
     .order("precisa_humano", { ascending: false })
     .order("atualizado_em", { ascending: false })
     .limit(50);
@@ -137,7 +159,7 @@ async function carregarConversas() {
   // O nome digitado nas listas tem prioridade sobre o nome do perfil do WhatsApp.
   const { data: nums } = await sb.from("salao_numeros").select("wa_id, nome");
   const nomeDaLista = new Map((nums || []).filter((n) => n.nome).map((n) => [n.wa_id, n.nome]));
-  const nomeDe = (c) => nomeDaLista.get(c.wa_id) || c.nome_perfil;
+  const nomeDe = (c) => c.nome_cliente || nomeDaLista.get(c.wa_id) || c.nome_perfil;
   const pausadas = data.filter((c) => c.bot_pausado).length;
   $("avisoConversas").classList.toggle("oculto", !data.some((c) => c.precisa_humano));
   $("conversasN").textContent = data.length ? `${data.length} ${data.length === 1 ? "conversa" : "conversas"}` : "";
@@ -155,6 +177,9 @@ async function carregarConversas() {
           });
           botao.append(iconePower());
           botao.onclick = () => mudarConversa(c);
+          const lapis = el("button", { class: "icone-ia neutro", title: "Alterar o nome da cliente", "aria-label": "Alterar o nome da cliente" });
+          lapis.append(iconeLapis());
+          lapis.onclick = () => renomearConversa(c, c.nome_cliente || nomeDe(c));
           return el(
             "div",
             { class: "linha" + (c.precisa_humano ? " atencao" : "") },
@@ -164,7 +189,7 @@ async function carregarConversas() {
               el("div", { class: "titulo" }, nomeDe(c) || telefone(c.wa_id)),
               el("div", { class: "sub" }, `${nomeDe(c) ? telefone(c.wa_id) + " · " : ""}${quando(c.atualizado_em)}`),
             ),
-            botao,
+            el("div", { class: "acoes" }, lapis, botao),
           );
         })
       : [vazio("Nenhuma conversa ainda.")]),

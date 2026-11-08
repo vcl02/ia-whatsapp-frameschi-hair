@@ -195,19 +195,21 @@ export class RepositorioSupabase implements Repositorio {
     const r = checar(
       await this.db
         .from("salao_conversas")
-        .select("id, wa_id, nome_perfil, bot_pausado")
+        .select("id, wa_id, nome_perfil, nome_cliente, bot_pausado")
         .eq("id", id)
         .single(),
     ) as {
       id: string;
       wa_id: string;
       nome_perfil: string | null;
+      nome_cliente: string | null;
       bot_pausado: boolean;
     };
     return {
       id: r.id,
       waId: r.wa_id,
-      nomePerfil: r.nome_perfil,
+      // o nome editado no painel vale mais que o do perfil do WhatsApp
+      nomePerfil: r.nome_cliente ?? r.nome_perfil,
       botPausado: r.bot_pausado,
     };
   }
