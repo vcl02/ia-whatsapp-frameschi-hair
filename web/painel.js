@@ -1,4 +1,6 @@
-// Lógica da tela de conversas. Carregado por index.html.
+// Painel do bot: lista de conversas e liga/desliga do bot de cada uma.
+// Não exibe o conteúdo das conversas (privacidade): só quem é, se o bot está ativo
+// e se precisa de atenção. Logs de erro entram no futuro.
 const sb = supabase.createClient(
   window.PAINEL.supabaseUrl,
   window.PAINEL.supabaseAnonKey,
@@ -26,7 +28,7 @@ async function carregarLista() {
   const { data, error } = await sb
     .from("salao_conversas")
     .select(
-      "id, wa_id, nome_perfil, bot_pausado, precisa_humano, motivo_humano, atualizado_em",
+      "id, wa_id, nome_perfil, bot_pausado, precisa_humano, atualizado_em",
     )
     .order("precisa_humano", { ascending: false })
     .order("atualizado_em", { ascending: false })
@@ -75,9 +77,7 @@ function desenharTopo() {
   };
   $("topo").replaceChildren(
     el("strong", {}, `${c.nome_perfil || ""} ${c.wa_id}`),
-    c.precisa_humano
-      ? el("span", { class: "alerta" }, c.motivo_humano || "precisa de humano")
-      : null,
+    c.precisa_humano ? el("span", { class: "alerta" }, "precisa de você") : null,
     pausa,
   );
 }
@@ -85,36 +85,7 @@ function desenharTopo() {
 async function abrir(c) {
   atual = c;
   desenharTopo();
-  await carregarMsgs();
   await carregarLista();
-}
-
-async function carregarMsgs() {
-  if (!atual) return;
-  const { data, error } = await sb
-    .from("salao_mensagens")
-    .select("autor, tipo, texto, status, erro, criado_em")
-    .eq("conversa_id", atual.id)
-    .order("criado_em")
-    .limit(500);
-  if (error) return alert(error.message);
-  const caixa = $("msgs");
-  const noFim = caixa.scrollHeight - caixa.scrollTop - caixa.clientHeight < 40;
-  caixa.replaceChildren(
-    ...data.map((m) =>
-      el(
-        "div",
-        { class: "msg " + m.autor },
-        m.texto ?? `[${m.tipo}]`,
-        el(
-          "small",
-          { class: m.erro ? "alerta" : "" },
-          `${m.autor} · ${hora(m.criado_em)}${m.status ? " · " + m.status : ""}${m.erro ? " · erro: " + JSON.stringify(m.erro) : ""}`,
-        ),
-      ),
-    ),
-  );
-  if (noFim) caixa.scrollTop = caixa.scrollHeight;
 }
 
 $("login").onsubmit = async (e) => {
@@ -137,9 +108,6 @@ sb.auth.onAuthStateChange((_ev, sessao) => {
   clearInterval(timer);
   if (logado) {
     carregarLista();
-    timer = setInterval(() => {
-      carregarLista();
-      carregarMsgs();
-    }, 15000);
+    timer = setInterval(carregarLista, 15000);
   }
 });

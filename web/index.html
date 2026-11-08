@@ -138,39 +138,9 @@
       #topo strong {
         flex: 1;
       }
-      #msgs {
-        flex: 1;
-        overflow-y: auto;
+      #aviso {
         padding: 16px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-      .msg {
-        max-width: 75%;
-        padding: 8px 10px;
-        border-radius: 8px;
-        border: 1px solid var(--line);
-        white-space: pre-wrap;
-        word-wrap: break-word;
-      }
-      .msg.cliente {
-        background: var(--cliente);
-        align-self: flex-start;
-      }
-      .msg.bot {
-        background: var(--bot);
-        align-self: flex-end;
-      }
-      .msg.humano {
-        background: var(--humano);
-        align-self: flex-end;
-      }
-      .msg small {
-        display: block;
         color: var(--muted);
-        font-size: 12px;
-        margin-top: 4px;
       }
       table {
         border-collapse: collapse;
@@ -195,9 +165,6 @@
           max-height: 35vh;
           border-right: 0;
           border-bottom: 1px solid var(--line);
-        }
-        .msg {
-          max-width: 90%;
         }
       }
     </style>
@@ -232,7 +199,7 @@
       <nav id="lista"></nav>
       <section id="conversa">
         <div id="topo"><strong>Escolha uma conversa</strong></div>
-        <div id="msgs"></div>
+        <p id="aviso">O conteúdo das conversas não é exibido aqui. Use o botão acima para ativar ou desativar o bot de cada conversa; respostas pessoais são pelo app do WhatsApp.</p>
       </section>
     </div>
 
