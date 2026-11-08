@@ -424,6 +424,16 @@
       .btn.x {
         padding: 2px 9px;
         line-height: 1.3;
+        color: var(--bad);
+        background: var(--bad-soft);
+        border-color: var(--bad);
+      }
+      .btn.x:hover {
+        background: var(--bad-soft);
+        filter: brightness(1.2);
+      }
+      .adicionar .btn-icone {
+        align-self: center;
       }
       body.ver-tecnico .numeros.cinco {
         grid-template-columns: repeat(5, 1fr);
@@ -547,12 +557,7 @@
         .listas {
           grid-template-columns: 1fr;
         }
-        .adicionar {
-          grid-template-columns: 1fr 1fr;
-        }
-        .adicionar button {
-          grid-column: 1 / -1;
-        }
+
       }
     </style>
   </head>
@@ -619,8 +624,8 @@
             <div id="listaTeste" class="lista"></div>
             <form id="formTeste" class="adicionar">
               <input id="numTeste" inputmode="tel" placeholder="(11) 99999-9999" required />
-              <input id="nomeTeste" placeholder="Nome (opcional)" maxlength="60" />
-              <button class="btn ouro">Adicionar</button>
+              <input id="nomeTeste" placeholder="Nome" maxlength="60" />
+              <button class="btn ouro btn-icone" title="Adicionar" aria-label="Adicionar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14" /><path d="M5 12h14" /></svg></button>
             </form>
           </div>
           <div>
@@ -628,8 +633,8 @@
             <div id="listaFamiliar" class="lista"></div>
             <form id="formFamiliar" class="adicionar">
               <input id="numFamiliar" inputmode="tel" placeholder="(11) 99999-9999" required />
-              <input id="nomeFamiliar" placeholder="Nome (opcional)" maxlength="60" />
-              <button class="btn ouro">Adicionar</button>
+              <input id="nomeFamiliar" placeholder="Nome" maxlength="60" />
+              <button class="btn ouro btn-icone" title="Adicionar" aria-label="Adicionar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14" /><path d="M5 12h14" /></svg></button>
             </form>
           </div>
         </div>
