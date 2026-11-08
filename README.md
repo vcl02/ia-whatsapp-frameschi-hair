@@ -16,7 +16,7 @@ supabase/
   migrations/                 esquema, RLS e visão de falhas de envio
   functions/
     salao-webhook/            webhook da Meta (verificação, assinatura, gravação, bot)
-    salao-responder/          envio manual pela tela de conversas
+    salao-responder/          desativada: só responde 410 (envio é pelo app do WhatsApp)
     salao-sincronizar/        espelho diário do Minha Agenda (serviços, horário, regras)
     _shared/                  módulos comuns (assinatura, WhatsApp, LLM, regras do bot, banco)
   tests/                      testes Deno (sem rede, sem banco)
@@ -46,8 +46,7 @@ docs/                         decisões, diagnóstico dos modelos, pendências, 
 5. A tela usa login do Supabase Auth; só quem está em `salao_equipe` vê
    algo (RLS). A tela só lê as conversas e liga/desliga o bot de cada uma
    (Pausar/Retomar). Não envia mensagem: respostas humanas são pelo app do
-   WhatsApp. A função `salao-responder` continua no repositório, mas a tela
-   não a chama.
+   WhatsApp. A função `salao-responder` ficou só como stub (410).
 6. Conversas paradas há 12 meses são apagadas todo dia (pg_cron).
 
 ## Desenvolvimento

@@ -22,7 +22,7 @@ isolado por prefixo. Número: o seu número já registrado na API.
 | 2 | Inserir o seu usuário em `salao_equipe` | tabela `salao_equipe` | libera a tela para você |
 | 3 | Cadastrar serviços e preços (pela tela, depois do passo 6) | tabela `salao_servicos` | o bot passa a responder com a LLM |
 | 4 | Secrets `SALAO_*` (lista em `.env.example`) | Edge Functions do hub (vale para o projeto todo) | guarda token da Meta, app secret, chave da Anthropic, e-mail de aviso |
-| 5 | Deploy de `salao-webhook` e `salao-responder` | Edge Functions do hub | publica as URLs; as funções do hub não mudam |
+| 5 | Deploy de `salao-webhook` (e `salao-responder`, que só responde 410) | Edge Functions do hub | publica as URLs; as funções do hub não mudam |
 | 6 | Webhook no app da Meta: URL de `salao-webhook` + verify token; assinar `messages` (e `smb_message_echoes` quando for o número da Bruna) | app na Meta | a Meta passa a mandar mensagens e statuses |
 | 7 | Conta no Resend, domínio/remetente verificado, chave em `SALAO_RESEND_API_KEY` | Resend | ativa o aviso por e-mail |
 
