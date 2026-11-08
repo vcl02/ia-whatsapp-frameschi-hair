@@ -84,10 +84,6 @@ function desenharTopo() {
 
 async function abrir(c) {
   atual = c;
-  $("falhas").classList.add("oculto");
-  $("servicos").classList.add("oculto");
-  $("msgs").classList.remove("oculto");
-  $("envio").classList.remove("oculto");
   desenharTopo();
   await carregarMsgs();
   await carregarLista();
@@ -121,97 +117,6 @@ async function carregarMsgs() {
   if (noFim) caixa.scrollTop = caixa.scrollHeight;
 }
 
-let enviando = false; // evita mandar a mesma mensagem várias vezes por clique repetido
-$("envio").onsubmit = async (e) => {
-  e.preventDefault();
-  const texto = $("texto").value.trim();
-  if (!texto || !atual || enviando) return;
-  enviando = true;
-  const botao = $("envio").querySelector("button");
-  botao.disabled = true;
-  botao.textContent = "Enviando…";
-  try {
-    const { error } = await sb.functions.invoke("salao-responder", {
-      body: { conversa_id: atual.id, texto },
-    });
-    if (error) {
-      let msg = error.message;
-      try {
-        msg = (await error.context.json()).erro || msg;
-      } catch {}
-      return alert(msg);
-    }
-    $("texto").value = "";
-    await carregarMsgs();
-    await carregarLista();
-  } finally {
-    enviando = false;
-    botao.disabled = false;
-    botao.textContent = "Enviar";
-  }
-};
-
-$("btnFalhas").onclick = async () => {
-  atual = null;
-  $("msgs").classList.add("oculto");
-  $("envio").classList.add("oculto");
-  $("servicos").classList.add("oculto");
-  $("falhas").classList.remove("oculto");
-  $("topo").replaceChildren(
-    el("strong", {}, "Falhas de envio (statuses com erro)"),
-  );
-  const { data, error } = await sb
-    .from("salao_falhas_de_envio")
-    .select("*")
-    .limit(200);
-  if (error) return alert(error.message);
-  const cols = [
-    "recebido_em",
-    "tipo_mensagem",
-    "codigo",
-    "titulo",
-    "mensagem",
-    "detalhes",
-    "recipient_id",
-  ];
-  $("falhas").replaceChildren(
-    data.length === 0
-      ? "Nenhuma falha registrada."
-      : el(
-          "table",
-          {},
-          el("tr", {}, ...cols.map((c) => el("th", {}, c))),
-          ...data.map((r) =>
-            el(
-              "tr",
-              {},
-              ...cols.map((c) =>
-                el(
-                  "td",
-                  {},
-                  c === "recebido_em" ? hora(r[c]) : String(r[c] ?? ""),
-                ),
-              ),
-            ),
-          ),
-        ),
-  );
-};
-
-// Serviços: espelho do Minha Agenda (só leitura). Para mudar, altere no Minha Agenda; a sincronização diária traz a mudança para cá.
-function textoSincronizacao(info) {
-  try {
-    const u = JSON.parse(info.ultima_sincronizacao || "null");
-    if (!u) return "Ainda não sincronizado com o Minha Agenda.";
-    const quando = hora(u.em);
-    return u.ok
-      ? `Espelho do Minha Agenda · última sincronização: ${quando}`
-      : `A última sincronização falhou (${quando}): ${u.motivo}. Os dados abaixo são da sincronização anterior.`;
-  } catch {
-    return "";
-  }
-}
-
 $("login").onsubmit = async (e) => {
   e.preventDefault();
   const { error } = await sb.auth.signInWithPassword({
@@ -229,7 +134,6 @@ sb.auth.onAuthStateChange((_ev, sessao) => {
   $("login").classList.toggle("oculto", logado);
   $("app").classList.toggle("oculto", !logado);
   $("btnSair").classList.toggle("oculto", !logado);
-  $("btnFalhas").classList.toggle("oculto", !logado);
   clearInterval(timer);
   if (logado) {
     carregarLista();

@@ -21,7 +21,7 @@ supabase/
     _shared/                  módulos comuns (assinatura, WhatsApp, LLM, regras do bot, banco)
   tests/                      testes Deno (sem rede, sem banco)
   config.toml                 verify_jwt por função
-web/                          tela de conversas e de serviços/preços (estática)
+web/                          tela de conversas: ler e pausar/retomar o bot (estática)
                               publicada em https://vcl02.github.io/ia-whatsapp-frameschi-hair/painel/
 site/                         política de privacidade (GitHub Pages, workflow em .github/workflows/pages.yml)
 docs/                         decisões, diagnóstico dos modelos, pendências, deploy
@@ -44,8 +44,10 @@ docs/                         decisões, diagnóstico dos modelos, pendências, 
 4. Se alguém responder pelo app do celular (coexistência), o bot daquela
    conversa pausa sozinho (evento `smb_message_echoes`; formato não conferido).
 5. A tela usa login do Supabase Auth; só quem está em `salao_equipe` vê
-   algo (RLS). Responder pela tela pausa o bot da conversa. A aba Serviços
-   mostra o espelho do Minha Agenda (só leitura).
+   algo (RLS). A tela só lê as conversas e liga/desliga o bot de cada uma
+   (Pausar/Retomar). Não envia mensagem: respostas humanas são pelo app do
+   WhatsApp. A função `salao-responder` continua no repositório, mas a tela
+   não a chama.
 6. Conversas paradas há 12 meses são apagadas todo dia (pg_cron).
 
 ## Desenvolvimento
