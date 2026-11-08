@@ -134,6 +134,10 @@ async function carregarConversas() {
     .order("atualizado_em", { ascending: false })
     .limit(50);
   if (error) return falha(error);
+  // O nome digitado nas listas tem prioridade sobre o nome do perfil do WhatsApp.
+  const { data: nums } = await sb.from("salao_numeros").select("wa_id, nome");
+  const nomeDaLista = new Map((nums || []).filter((n) => n.nome).map((n) => [n.wa_id, n.nome]));
+  const nomeDe = (c) => nomeDaLista.get(c.wa_id) || c.nome_perfil;
   const pausadas = data.filter((c) => c.bot_pausado).length;
   $("avisoConversas").classList.toggle("oculto", !data.some((c) => c.precisa_humano));
   $("conversasN").textContent = data.length ? `${data.length} ${data.length === 1 ? "conversa" : "conversas"}` : "";
@@ -157,8 +161,8 @@ async function carregarConversas() {
             el(
               "div",
               { class: "principal" },
-              el("div", { class: "titulo" }, c.nome_perfil || telefone(c.wa_id)),
-              el("div", { class: "sub" }, `${c.nome_perfil ? telefone(c.wa_id) + " · " : ""}${quando(c.atualizado_em)}`),
+              el("div", { class: "titulo" }, nomeDe(c) || telefone(c.wa_id)),
+              el("div", { class: "sub" }, `${nomeDe(c) ? telefone(c.wa_id) + " · " : ""}${quando(c.atualizado_em)}`),
             ),
             botao,
           );
@@ -185,7 +189,7 @@ function desenharLista(destino, tipo, itens) {
           return el(
             "div",
             { class: "linha" },
-            el("div", { class: "principal" }, el("div", { class: "titulo" }, telefone(n.wa_id)), n.nome ? el("div", { class: "sub" }, n.nome) : null),
+            el("div", { class: "principal" }, el("div", { class: "titulo" }, n.nome || telefone(n.wa_id)), n.nome ? el("div", { class: "sub" }, telefone(n.wa_id)) : null),
             x,
           );
         })
