@@ -467,6 +467,7 @@ type LinhaAgendamento = {
   criado_em: string;
   status?: string;
   atualizado_em?: string;
+  remarcado_de?: string | null;
 };
 
 function paraProposta(r: LinhaAgendamento): Proposta {
@@ -483,6 +484,7 @@ function paraProposta(r: LinhaAgendamento): Proposta {
     nomeCliente: r.nome_cliente,
     expiraEm: new Date(r.expira_em).getTime(),
     criadoEm: new Date(r.criado_em).getTime(),
+    remarcadoDe: r.remarcado_de ?? null,
   };
 }
 
@@ -584,6 +586,7 @@ export class RepositorioPropostasSupabase implements RepositorioPropostas {
         .select("*")
         .eq("conversa_id", conversaId)
         .eq("status", "agendado")
+        .is("cancelamento_pedido_em", null)
         .gte("data", hoje)
         .order("atualizado_em", { ascending: false })
         .limit(1),
@@ -604,6 +607,45 @@ export class RepositorioPropostasSupabase implements RepositorioPropostas {
         .eq("id", ativo.id),
     );
     return resumoDoAgendamento(ativo);
+  }
+
+  async registrarRemarcacao(
+    antigo: Proposta,
+    novo: Omit<Proposta, "id" | "criadoEm" | "expiraEm" | "remarcadoDe">,
+  ): Promise<Proposta> {
+    const agora = new Date().toISOString();
+    const r = checar(
+      await this.db
+        .from("salao_agendamentos")
+        .insert({
+          conversa_id: novo.conversaId,
+          servico_origem_id: novo.servicoId,
+          servico_nome: novo.servicoNome,
+          profissional_id: novo.profissionalId,
+          profissional_nome: novo.profissionalNome,
+          data: novo.data,
+          hora: novo.hora,
+          preco: novo.preco,
+          nome_cliente: novo.nomeCliente,
+          status: "agendado",
+          detalhe: "remarcação (sinal do agendamento anterior)",
+          expira_em: agora,
+          remarcado_de: antigo.id,
+        })
+        .select("*")
+        .single(),
+    ) as LinhaAgendamento;
+    checar(
+      await this.db
+        .from("salao_agendamentos")
+        .update({
+          cancelamento_pedido_em: agora,
+          detalhe: "remarcado: cancelar este horário no Minha Agenda",
+          atualizado_em: agora,
+        })
+        .eq("id", antigo.id),
+    );
+    return paraProposta(r);
   }
 
   async agendadosDesde(conversaId: string, desde: Date): Promise<number> {

@@ -1,6 +1,6 @@
 import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1.0.13";
 import {
-  AgendadorMinhaAgenda, DEF_PROPOR, contextoDoAgendamento, dataCurta, resumoDoAgendamento, montarFerramentas, receberComprovante, sinalDoServico, telefoneNacional, valorDoPreco,
+  AgendadorMinhaAgenda, DEF_PROPOR, DEF_REMARCAR, contextoDoAgendamento, dataCurta, resumoDoAgendamento, montarFerramentas, receberComprovante, sinalDoServico, telefoneNacional, valorDoPreco,
   type DepsComprovante, type DepsFerramentas, type PedidoAgendamento, type Proposta, type RepositorioPropostas,
 } from "../functions/_shared/agendamento.ts";
 import type { Agenda } from "../functions/_shared/disponibilidade.ts";
@@ -58,7 +58,7 @@ Deno.test("agendador: resposta sem CREATED é erro", async () => {
 // ---------- fluxo propor -> comprovante ----------
 
 class PropostasMemoria implements RepositorioPropostas {
-  itens: Array<Proposta & { status: string; detalhe?: string }> = [];
+  itens: Array<Proposta & { status: string; detalhe?: string; cancelamentoPedido?: boolean }> = [];
   criar(p: Omit<Proposta, "id" | "criadoEm">) {
     for (const x of this.itens) if (x.conversaId === p.conversaId && x.status === "proposto") x.status = "substituido";
     const n = { ...p, id: `p${this.itens.length + 1}`, status: "proposto", criadoEm: AGORA.getTime() };
@@ -79,8 +79,15 @@ class PropostasMemoria implements RepositorioPropostas {
   atualizadoEm?: number;
   cancelamentosPedidos: string[] = [];
   agendadoAtivo(c: string, hoje: string) {
-    const x = [...this.itens].reverse().find((i) => i.conversaId === c && i.status === "agendado" && i.data >= hoje);
+    const x = [...this.itens].reverse().find((i) => i.conversaId === c && i.status === "agendado" && !i.cancelamentoPedido && i.data >= hoje);
     return Promise.resolve(x ?? null);
+  }
+  registrarRemarcacao(antigo: Proposta, novo: Omit<Proposta, "id" | "criadoEm" | "expiraEm" | "remarcadoDe">) {
+    const velho = this.itens.find((i) => i.id === antigo.id)!;
+    velho.cancelamentoPedido = true;
+    const n = { ...novo, id: `p${this.itens.length + 1}`, status: "agendado", criadoEm: AGORA.getTime(), expiraEm: AGORA.getTime(), remarcadoDe: antigo.id };
+    this.itens.push(n);
+    return Promise.resolve(n);
   }
   async marcarCancelamentoPedido(c: string, hoje: string) {
     const x = await this.agendadoAtivo(c, hoje);
@@ -103,12 +110,13 @@ function cenario(opcoes: { livre?: boolean; falharAgendamento?: boolean; semPix?
   const agendados: PedidoAgendamento[] = [];
   const avisos: Array<[string, string]> = [];
   let livre = opcoes.livre ?? true;
+  let falhar = opcoes.falharAgendamento ?? false;
   let agoraAtual = AGORA;
   const consulta = { vagas: (_s: number, data: string): Promise<Agenda> => Promise.resolve({ data, feriado: false, profissionais: [
     { id: 486643, nome: "Bruna", horarios: livre ? ["09:00", "11:00"] : ["11:00"] },
     { id: 1001243, nome: "Alessandra", horarios: [] },
   ] }) };
-  const agendador = { agendar: (p: PedidoAgendamento) => opcoes.falharAgendamento ? Promise.reject(new Error("HTTP 409")) : (agendados.push(p), Promise.resolve()) };
+  const agendador = { agendar: (p: PedidoAgendamento) => falhar ? Promise.reject(new Error("HTTP 409")) : (agendados.push(p), Promise.resolve()) };
   const comuns = { avisar: (a: string, t: string) => (avisos.push([a, t]), Promise.resolve()), log: () => {}, agora: () => agoraAtual };
   const deps: DepsFerramentas = { consulta, agendador, propostas, pix: opcoes.semPix ? undefined : PIX, maxDias: 15, ...comuns };
   const depsComp: DepsComprovante = { consulta, agendador, propostas, semLimiteDiario: opcoes.semLimiteDiario, ...comuns };
@@ -117,14 +125,15 @@ function cenario(opcoes: { livre?: boolean; falharAgendamento?: boolean; semPix?
     ferramentas: () => montarFerramentas({ conversaId: "c1", waId: "5511992090474", servicos: SERVICOS }, deps),
     comprovante: (tipo = "image", conversa = "c1") => receberComprovante({ conversaId: conversa, waId: "5511992090474" }, depsComp, tipo),
     ocupar: () => { livre = false; },
+    falhar: (v: boolean) => { falhar = v; },
     avancar: (ms: number) => { agoraAtual = new Date(agoraAtual.getTime() + ms); },
   };
 }
 
 const PROPOSTA = { servico_id: 5732343, data: "2026-11-10", hora: "09:00", profissional: "Bruna", nome_cliente: "Isa" };
 
-Deno.test("oferece consulta e proposta (a IA não tem ferramenta para agendar)", () => {
-  assertEquals(cenario().ferramentas().definicoes.map((d) => d.name), ["consultar_horarios", DEF_PROPOR.name]);
+Deno.test("oferece consulta, proposta e remarcação (a IA não tem ferramenta para agendar sem comprovante)", () => {
+  assertEquals(cenario().ferramentas().definicoes.map((d) => d.name), ["consultar_horarios", DEF_PROPOR.name, DEF_REMARCAR.name]);
 });
 
 Deno.test("só consulta quando o agendamento está desligado", async () => {
@@ -305,4 +314,72 @@ Deno.test("marcar pedido de cancelamento devolve o resumo; sem agendamento ativo
   const r = await c.propostas.marcarCancelamentoPedido("c1", "2026-11-07");
   assertStringIncludes(r!, "Banho de Lua");
   assertEquals(c.propostas.cancelamentosPedidos.length, 1);
+});
+
+// ---------- remarcação ----------
+
+async function comAgendamento(opcoes: Parameters<typeof cenario>[0] = {}) {
+  const c = cenario(opcoes);
+  await c.ferramentas().executar("propor_agendamento", PROPOSTA); // 10/11 09:00 com a Bruna (mais de 24 h depois de AGORA)
+  await c.comprovante();
+  c.agendados.length = 0;
+  c.avisos.length = 0;
+  return c;
+}
+const REMARCAR = { data: "2026-11-11", hora: "11:00", profissional: "Bruna" };
+
+Deno.test("remarcar: agenda o novo horário, marca o antigo para a Bruna cancelar e avisa", async () => {
+  const c = await comAgendamento();
+  const r = await c.ferramentas().executar("remarcar_agendamento", REMARCAR);
+  assertStringIncludes(r, "REMARCADO");
+  assertStringIncludes(r, "não peça novo Pix");
+  assertEquals(c.agendados.length, 1);
+  assertEquals([c.agendados[0].data, c.agendados[0].hora, c.agendados[0].servicoId], ["2026-11-11", "11:00", 5732343]);
+  assertEquals(c.propostas.itens[0].cancelamentoPedido, true); // o antigo
+  assertEquals(c.propostas.itens[1].remarcadoDe, "p1");
+  assertEquals(c.avisos.length, 1);
+  assertStringIncludes(c.avisos[0][1], "CANCELE o horário antigo");
+  assertStringIncludes(c.avisos[0][1], "terça-feira, 10/11");
+  assertStringIncludes(c.avisos[0][1], "quarta-feira, 11/11");
+});
+
+Deno.test("remarcar: só uma vez por agendamento", async () => {
+  const c = await comAgendamento();
+  await c.ferramentas().executar("remarcar_agendamento", REMARCAR);
+  const r = await c.ferramentas().executar("remarcar_agendamento", { ...REMARCAR, data: "2026-11-12" });
+  assertStringIncludes(r, "já foi remarcado uma vez");
+  assertEquals(c.agendados.length, 1);
+});
+
+Deno.test("remarcar: com menos de 24 h de antecedência não remarca", async () => {
+  const c = await comAgendamento();
+  c.avancar(49 * 60 * 60_000); // 09/11 13:00Z: faltam 23 h para 10/11 09:00 (UTC-3 = 12:00Z)
+  const r = await c.ferramentas().executar("remarcar_agendamento", REMARCAR);
+  assertStringIncludes(r, "menos de 24 horas");
+  assertEquals(c.agendados.length, 0);
+});
+
+Deno.test("remarcar: horário ocupado, mesmo horário, sem agendamento e falha do sistema", async () => {
+  const sem = cenario();
+  assertStringIncludes(await sem.ferramentas().executar("remarcar_agendamento", REMARCAR), "não há agendamento ativo");
+  const c = await comAgendamento();
+  assertStringIncludes(await c.ferramentas().executar("remarcar_agendamento", { ...REMARCAR, hora: "10:00" }), "não está livre");
+  assertStringIncludes(await c.ferramentas().executar("remarcar_agendamento", { ...REMARCAR, profissional: "Joana" }), "Opções: Bruna, Alessandra");
+  assertStringIncludes(await c.ferramentas().executar("remarcar_agendamento", { data: "2026-11-10", hora: "09:00", profissional: "Bruna" }), "já é o horário agendado");
+  assertStringIncludes(await c.ferramentas().executar("remarcar_agendamento", { ...REMARCAR, data: "2026-12-30" }), "15 dias");
+  assertEquals(c.agendados.length, 0);
+  const f = await comAgendamento();
+  f.falhar(true);
+  assertStringIncludes(await f.ferramentas().executar("remarcar_agendamento", REMARCAR), "nada foi alterado");
+  assertEquals(f.propostas.itens.length, 1);
+});
+
+Deno.test("depois de remarcar, o contexto da IA mostra só o agendamento novo (o antigo espera o cancelamento)", async () => {
+  const c = await comAgendamento();
+  await c.ferramentas().executar("remarcar_agendamento", REMARCAR);
+  const t = (await contextoDoAgendamento(c.propostas, "c1", new Date(AGORA.getTime() + 60_000), () => Promise.resolve()))!;
+  assertStringIncludes(t, "quarta-feira, 11/11");
+  assertEquals(t.includes("terça-feira, 10/11"), false);
+  assertStringIncludes(t, "já foi remarcado uma vez");
+  assertEquals(t.includes("acabou de agendar"), false);
 });

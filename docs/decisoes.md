@@ -187,3 +187,19 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
   ativo ("o usuário não teria cadastro para cancelar"). O agendamento da IA é o fluxo
   sem login (convidada), então o cancelamento automático por esse caminho não é viável
   com a configuração atual; desligar o "sem login" mudaria o site da Bruna inteiro.
+
+## 2026-11-08 — Remarcação feita pela IA (com reserva do novo horário)
+- Pedido do Victor/Bruna: o sinal já pago **vale** para o novo horário; prazo mínimo de
+  **24 h** antes do horário atual; o novo horário fica **reservado** (agendado de verdade).
+- Não existe endpoint de remarcar no site do Minha Agenda (só criar e cancelar), e
+  cancelar não é viável. Então a ferramenta `remarcar_agendamento` agenda o horário NOVO
+  (mesmo serviço, sem novo Pix) e marca o ANTIGO com `cancelamento_pedido_em`; o e-mail à
+  Bruna diz "CANCELE o horário antigo no Minha Agenda". Até ela cancelar, os dois horários
+  existem lá.
+- Travas no código: só com agendamento ativo feito pelo sistema, só 1 remarcação por
+  agendamento (`remarcado_de`), só com 24 h ou mais de antecedência, só o mesmo serviço,
+  só horário livre reconsultado na hora (até 15 dias). Recusa => a IA explica e passa para
+  a Bruna.
+- Risco aceito: a remarcação não pede comprovante (o sinal já foi pago), então quem tem um
+  agendamento ativo pode ocupar um segundo horário por algumas horas até a Bruna cancelar
+  o antigo; limitado a uma remarcação por agendamento.
