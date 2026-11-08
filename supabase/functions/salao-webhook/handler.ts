@@ -39,6 +39,9 @@ function log(evento: string, dados: Record<string, unknown> = {}) {
   console.log(JSON.stringify({ evento, ...dados }));
 }
 
+// Eventos de erro vão também para o painel (tabela salao_eventos), sem texto de mensagem.
+const EVENTO_DE_ERRO = /^(erro_|status_falha)/;
+
 function emSegundoPlano(p: Promise<unknown>) {
   const seguro = p.catch((e) => log("erro_segundo_plano", { erro: String(e) }));
   if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(seguro);
@@ -92,6 +95,19 @@ export async function tratar(req: Request): Promise<Response> {
     lerPermitidos(Deno.env.get("SALAO_SO_RESPONDER_PARA")),
   );
   const db = clienteServico();
+  const logar = (evento: string, dados: Record<string, unknown> = {}) => {
+    log(evento, dados);
+    if (!EVENTO_DE_ERRO.test(evento)) return;
+    emSegundoPlano(
+      Promise.resolve(
+        db
+          .from("salao_eventos")
+          .insert({ tipo: evento, detalhe: JSON.stringify(dados).slice(0, 500) }),
+      ).then(({ error }) => {
+        if (error) log("falha_gravar_evento", { erro: String(error.message) });
+      }),
+    );
+  };
   const repo = new RepositorioSupabase(db);
   // Consulta e agendamento no Minha Agenda: só ligam com a chave do Firebase configurada.
   // O agendamento pode ser desligado à parte com SALAO_AGENDAR=nao.
@@ -106,7 +122,7 @@ export async function tratar(req: Request): Promise<Response> {
   for (const s of eventos.statuses) {
     await repo.registrarStatus(s);
     if (s.status === "failed")
-      log("status_falha", { wamid: s.wamid, erros: s.erros });
+      logar("status_falha", { wamid: s.wamid, erros: s.erros });
   }
   for (const e of eventos.ecos) await repo.registrarEco(e);
 
@@ -140,11 +156,11 @@ export async function tratar(req: Request): Promise<Response> {
                 assunto,
                 texto,
               ),
-            log,
+            log: logar,
             maxDias: 15, // o agendamento online abre até 15 dias à frente (Minha Agenda)
           })
       : undefined,
-    log,
+    log: logar,
   };
 
   for (const m of eventos.mensagens) {

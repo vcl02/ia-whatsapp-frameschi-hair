@@ -149,8 +149,8 @@ export async function tratar(req: Request): Promise<Response> {
       await enviarResumo(
         aviso,
         depsAviso,
-        "Bot do salão: mudanças vindas do Minha Agenda",
-        `A sincronização diária com o Minha Agenda aplicou estas mudanças no bot:\n\n- ${linhas.join("\n- ")}\n`,
+        "IA do salão: mudanças vindas do Minha Agenda",
+        `A sincronização diária com o Minha Agenda aplicou estas mudanças na IA:\n\n- ${linhas.join("\n- ")}\n`,
       );
     }
     return json(200, { ok: true, ...resumo });
@@ -166,8 +166,8 @@ export async function tratar(req: Request): Promise<Response> {
     await enviarResumo(
       aviso,
       depsAviso,
-      "Bot do salão: a sincronização com o Minha Agenda falhou",
-      `Nada foi alterado nos serviços do bot.\n\nMotivo: ${motivo}\n`,
+      "IA do salão: a sincronização com o Minha Agenda falhou",
+      `Nada foi alterado nos serviços da IA.\n\nMotivo: ${motivo}\n`,
     );
     return json(suspeita ? 422 : 502, { ok: false, erro: motivo });
   }

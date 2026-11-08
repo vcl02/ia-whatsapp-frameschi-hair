@@ -214,37 +214,49 @@
         font-size: 12.5px;
         margin-top: 6px;
       }
-      .chave {
-        position: relative;
-        width: 76px;
-        height: 42px;
+      .btn-ia {
         flex: none;
-        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 20px;
+        border-radius: 12px;
         border: 1px solid var(--line);
         background: var(--surface-2);
-        padding: 0;
-        transition: background 0.2s, border-color 0.2s;
+        font-size: 16px;
+        font-weight: 650;
+        line-height: 1.2;
+        text-align: left;
+        transition: background 0.15s, border-color 0.15s, color 0.15s;
       }
-      .chave::after {
+      .btn-ia::before {
         content: "";
-        position: absolute;
-        top: 4px;
-        left: 4px;
-        width: 32px;
-        height: 32px;
+        width: 11px;
+        height: 11px;
         border-radius: 50%;
-        background: var(--muted);
-        transition: transform 0.2s, background 0.2s;
+        background: currentColor;
+        box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.07);
       }
-      .chave[aria-checked="true"] {
+      .btn-ia small {
+        display: block;
+        font-size: 12px;
+        font-weight: 500;
+        opacity: 0.75;
+      }
+      .btn-ia.ligada {
+        color: var(--ok);
         background: var(--ok-soft);
         border-color: var(--ok);
       }
-      .chave[aria-checked="true"]::after {
-        transform: translateX(34px);
-        background: var(--ok);
+      .btn-ia.desligada {
+        color: var(--bad);
+        background: var(--bad-soft);
+        border-color: var(--bad);
       }
-      .chave:disabled {
+      .btn-ia:hover:not(:disabled) {
+        filter: brightness(1.15);
+      }
+      .btn-ia:disabled {
         opacity: 0.6;
         cursor: wait;
       }
@@ -394,7 +406,7 @@
           <p id="iaEstado" class="estado">Carregando…</p>
           <p id="iaMeta" class="meta"></p>
         </div>
-        <button id="iaChave" class="chave" role="switch" aria-checked="false" aria-label="Ligar ou desligar a IA" disabled></button>
+        <button id="iaChave" class="btn-ia" aria-pressed="false" disabled>Carregando…</button>
       </section>
 
       <section class="numeros" id="numeros"></section>

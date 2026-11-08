@@ -409,7 +409,7 @@ export function montarFerramentas(
     const resumo = `${proposta.servicoNome}, ${proposta.data} às ${proposta.hora} com ${proposta.profissionalNome}, no nome de ${proposta.nomeCliente} (+${ctx.waId})`;
     try {
       await deps.avisar(
-        "Bot do salão: novo agendamento pelo WhatsApp",
+        "IA do salão: novo agendamento pelo WhatsApp",
         `O assistente agendou no Minha Agenda:\n\n${resumo}\n`,
       );
     } catch (e) {

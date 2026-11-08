@@ -143,7 +143,7 @@ export async function processarMensagem(
     return passarParaHumano(
       deps,
       c,
-      `mensagem do tipo "${msg.tipo}" (o bot só lê texto)`,
+      `mensagem do tipo "${msg.tipo}" (a IA só lê texto)`,
     );
   }
   if (PEDIDO_HUMANO.test(msg.texto)) {
@@ -204,7 +204,7 @@ export async function processarMensagem(
   if ((await deps.repo.conversa(c.id)).botPausado) return "pausado";
 
   if (decisao.passar_para_humano) {
-    await marcarEAvisar(deps, c, decisao.motivo || "decisão do bot");
+    await marcarEAvisar(deps, c, decisao.motivo || "decisão da IA");
   }
   const texto =
     decisao.resposta.trim() ||

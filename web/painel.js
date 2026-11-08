@@ -51,11 +51,16 @@ function desenharIA(ctrl) {
   hero.classList.toggle("ligada", iaAtiva);
   hero.classList.toggle("desligada", !iaAtiva);
   $("iaEstado").textContent = iaAtiva
-    ? "Ligada: respondendo as clientes no WhatsApp."
-    : "Desligada: nenhuma resposta automática está sendo enviada.";
+    ? "Respondendo as clientes no WhatsApp."
+    : "Nenhuma resposta automática está sendo enviada.";
   $("iaMeta").textContent = ctrl.atualizado_em ? `Última mudança: ${quando(ctrl.atualizado_em)}` : "";
   const chave = $("iaChave");
-  chave.setAttribute("aria-checked", String(iaAtiva));
+  chave.classList.toggle("ligada", iaAtiva);
+  chave.classList.toggle("desligada", !iaAtiva);
+  chave.setAttribute("aria-pressed", String(iaAtiva));
+  chave.replaceChildren(
+    el("span", {}, iaAtiva ? "IA ligada" : "IA desligada", el("small", {}, iaAtiva ? "Clique para desligar" : "Clique para ligar")),
+  );
   chave.disabled = false;
 }
 
@@ -146,6 +151,26 @@ async function carregarAtencao() {
 }
 
 // ---------- erros ----------
+function detalheDoEvento(bruto) {
+  if (!bruto) return "";
+  try {
+    const d = JSON.parse(bruto);
+    const t = d.erro ?? d.erros;
+    return String(typeof t === "string" ? t : JSON.stringify(t ?? d)).slice(0, 140);
+  } catch {
+    return String(bruto).slice(0, 140);
+  }
+}
+
+const ROTULO_EVENTO = {
+  erro_llm: "Falha ao gerar a resposta da IA",
+  erro_agendamento: "Falha ao agendar no Minha Agenda",
+  erro_consulta_horarios: "Falha ao consultar horários",
+  erro_aviso: "Falha ao enviar o e-mail de aviso",
+  erro_aviso_agendamento: "Falha ao enviar o e-mail de agendamento",
+  erro_segundo_plano: "Erro interno ao processar a mensagem",
+  status_falha: "Mensagem não entregue no WhatsApp",
+};
 async function carregarErros() {
   const [falhas, info] = await Promise.all([
     sb.from("salao_falhas_de_envio").select("recebido_em, codigo, titulo, mensagem").limit(8),
@@ -161,6 +186,12 @@ async function carregarErros() {
   }
   for (const f of falhas.data || [])
     linhas.push([f.titulo || "Falha ao entregar mensagem", [f.codigo, f.mensagem].filter(Boolean).join(" · "), f.recebido_em]);
+  const { data: eventos } = await sb
+    .from("salao_eventos")
+    .select("tipo, detalhe, criado_em")
+    .order("criado_em", { ascending: false })
+    .limit(8);
+  for (const ev of eventos || []) linhas.push([ROTULO_EVENTO[ev.tipo] || "Erro interno", detalheDoEvento(ev.detalhe), ev.criado_em]);
   const { data: ag } = await sb
     .from("salao_agendamentos")
     .select("servico_nome, detalhe, atualizado_em")
