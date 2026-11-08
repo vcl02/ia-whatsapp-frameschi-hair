@@ -40,3 +40,12 @@ visão e funções `salao_*`.
 3. Conferir a política atual da Meta para IA.
 4. Confirmar com a Bruna se ela usa os lembretes por WhatsApp do Minha Agenda.
 5. Migrar o número da Bruna (coexistência) e assinar `smb_message_echoes`.
+
+## Arquivos de cada função (deploy pelo MCP, tudo inline)
+- `salao-webhook`: index, handler e, em `_shared`: assinatura, whatsapp, deps, db, llm,
+  disponibilidade, agendamento, bot, salao, aviso, lembrete.
+- `salao-lembrete`: index, handler e, em `_shared`: deps, whatsapp, db, salao, bot, llm,
+  disponibilidade, agendamento, lembrete.
+- `salao-sincronizar`: index, handler e, em `_shared`: deps, db, llm, aviso, minhaagenda
+  (o `db.ts` importa `llm.ts`; imports só de tipo não precisam ir junto).
+- Depois de cada deploy, comparar os arquivos publicados com os do repositório.
