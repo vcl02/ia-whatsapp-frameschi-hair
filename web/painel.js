@@ -50,9 +50,6 @@ function desenharIA(ctrl) {
   const hero = $("hero");
   hero.classList.toggle("ligada", iaAtiva);
   hero.classList.toggle("desligada", !iaAtiva);
-  $("iaEstado").textContent = iaAtiva
-    ? "Novas conversas começam com a IA ligada. As conversas já iniciadas não mudam."
-    : "Novas conversas começam com a IA pausada. As conversas já iniciadas não mudam.";
   $("iaMeta").textContent = ctrl.atualizado_em ? `Última mudança: ${quando(ctrl.atualizado_em)}` : "";
   const chave = $("iaChave");
   chave.classList.toggle("ligada", iaAtiva);
@@ -82,7 +79,7 @@ $("iaChave").onclick = async () => {
 async function carregarIA() {
   const { data, error } = await sb.from("salao_controle").select("ia_ativa, atualizado_em").eq("id", 1).maybeSingle();
   if (error || !data) {
-    $("iaEstado").textContent = "Não consegui ler o estado da IA. Confira se a migration do painel foi aplicada.";
+    $("iaMeta").textContent = "Não consegui ler o estado da IA. Confira se a migration do painel foi aplicada.";
     falha(error);
     return;
   }
@@ -140,7 +137,8 @@ async function carregarConversas() {
     .limit(50);
   if (error) return falha(error);
   const pausadas = data.filter((c) => c.bot_pausado).length;
-  $("conversasN").textContent = data.length ? `${data.length}${pausadas ? ` · ${pausadas} pausada(s)` : ""}` : "";
+  $("conversasN").textContent = data.length ? `${data.length} ${data.length === 1 ? "conversa" : "conversas"}` : "";
+  $("pausadasN").textContent = pausadas ? `${pausadas} ${pausadas === 1 ? "pausada" : "pausadas"}` : "";
   $("conversas").replaceChildren(
     ...(data.length
       ? data.map((c) => {

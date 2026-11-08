@@ -111,8 +111,32 @@
       .btn:hover {
         background: var(--surface-2);
       }
-      .btn.atualizar.girando span {
-        display: inline-block;
+      .btn-icone {
+        width: 46px;
+        height: 46px;
+        padding: 0;
+        display: inline-grid;
+        place-items: center;
+      }
+      .btn-icone svg {
+        width: 24px;
+        height: 24px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .btn-icone.sair {
+        color: var(--bad);
+        background: var(--bad-soft);
+        border-color: var(--bad);
+      }
+      .btn-icone.sair:hover {
+        background: var(--bad-soft);
+        filter: brightness(1.2);
+      }
+      .btn.atualizar.girando svg {
         animation: gira 0.8s linear infinite;
       }
       @keyframes gira {
@@ -184,6 +208,10 @@
         background: var(--surface-2);
         border-radius: 999px;
         padding: 1px 9px;
+      }
+      .card h2 .contagem.aviso {
+        color: var(--bad);
+        background: var(--bad-soft);
       }
       .grade {
         display: grid;
@@ -479,11 +507,14 @@
       <img src="../logo.png" alt="" width="40" height="40" />
       <div class="marca">
         <h1>Painel IA</h1>
-        <p>Bruna Frameschi Hair</p>
       </div>
       <div class="acoes">
-        <button id="btnAtualizar" class="btn atualizar oculto" title="Atualizar" aria-label="Atualizar"><span>↻</span></button>
-        <button id="btnSair" class="btn oculto">Sair</button>
+        <button id="btnAtualizar" class="btn btn-icone atualizar oculto" title="Atualizar" aria-label="Atualizar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9" /><path d="M20 4v5h-5" /></svg>
+        </button>
+        <button id="btnSair" class="btn btn-icone sair oculto" title="Sair" aria-label="Sair">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3" /><path d="M16 8l4 4-4 4" /><path d="M20 12H9" /></svg>
+        </button>
       </div>
     </header>
 
@@ -498,8 +529,7 @@
     <main id="app" class="oculto">
       <section id="hero" class="card hero">
         <div class="texto">
-          <h2>IA nas novas conversas</h2>
-          <p id="iaEstado" class="estado">Carregando…</p>
+          <h2>IA Novas Conversas</h2>
           <p id="iaMeta" class="meta"></p>
         </div>
         <button id="iaChave" class="btn-ia" aria-pressed="false" disabled>Carregando…</button>
@@ -508,7 +538,7 @@
       <section class="numeros" id="numeros"></section>
 
       <section class="card">
-        <h2>Conversas <span id="conversasN" class="contagem"></span></h2>
+        <h2>Conversas <span id="conversasN" class="contagem"></span><span id="pausadasN" class="contagem aviso"></span></h2>
         <div id="conversas" class="lista"></div>
       </section>
 
