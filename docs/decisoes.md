@@ -143,3 +143,11 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
   vai para a equipe (pode ter dinheiro envolvido). Segundo comprovante logo depois
   de agendar é ignorado. Imagem sem proposta pendente continua chamando a equipe.
 - Reconsulta a vaga ao propor e de novo ao receber o comprovante.
+- Lembrete (pedido do Victor): enquanto a proposta espera o comprovante, a cliente
+  recebe um lembrete fixo (sem IA) aos 7, 14, 21 e 28 minutos, dizendo que sem o
+  comprovante o horário não é agendado. Função `salao-lembrete`, chamada a cada
+  minuto pelo pg_cron; o contador `lembretes` é gravado antes de enviar (chamada
+  repetida não duplica). Conversa com a IA pausada não recebe.
+- Resposta em duplicidade (comprovante seguido de texto): o contexto da IA agora
+  diz quando o sistema acabou de agendar (até 3 min) e espera o comprovante em
+  processamento terminar; "resposta" vazia sem passar para humano não envia nada.

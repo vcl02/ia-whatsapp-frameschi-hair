@@ -193,11 +193,11 @@ Deno.test("horário e regras do Minha Agenda chegam ao modelo", async () => {
   assertEquals(t.salaoRecebido.valor?.endereco, SALAO.endereco); // endereço continua fixo
 });
 
-Deno.test("proposta pendente da conversa é passada para a IA", async () => {
+Deno.test("situação do agendamento da conversa é passada para a IA", async () => {
   const t = montar({ resposta: "ok", passar_para_humano: false, motivo: "", intencao: "agendar" });
   let recebida: string | null | undefined;
-  t.deps.atendente = { responder: (_h, _s, _d, o) => (recebida = o?.propostaPendente, Promise.resolve({ resposta: "ok", passar_para_humano: false, motivo: "", intencao: "agendar" as const })) };
-  t.deps.propostaPendente = () => Promise.resolve("Hidratação, 2026-11-11 às 09:00 com Bruna");
+  t.deps.atendente = { responder: (_h, _s, _d, o) => (recebida = o?.contextoAgendamento, Promise.resolve({ resposta: "ok", passar_para_humano: false, motivo: "", intencao: "agendar" as const })) };
+  t.deps.contextoAgendamento = () => Promise.resolve("Hidratação, 2026-11-11 às 09:00 com Bruna");
   await processarMensagem(t.deps, "c1", msg({ texto: "SIM" }));
   assertEquals(recebida, "Hidratação, 2026-11-11 às 09:00 com Bruna");
 });
@@ -248,4 +248,17 @@ Deno.test("falha ao processar o comprovante chama a equipe", async () => {
   t.deps.receberComprovante = () => Promise.reject(new Error("banco fora"));
   assertEquals(await processarMensagem(t.deps, "c1", msg({ tipo: "image", texto: null })), "passado_para_humano");
   assertEquals(t.avisos, ["falha ao processar o comprovante"]);
+});
+
+Deno.test("resposta vazia sem passar para humano: não manda nada (ex.: agradecimento logo depois de agendar)", async () => {
+  const t = montar({ resposta: " ", passar_para_humano: false, motivo: "", intencao: "outro" });
+  assertEquals(await processarMensagem(t.deps, "c1", msg({ texto: "obrigada!" })), "ignorado");
+  assertEquals(t.enviados, []);
+  assertEquals(t.repo.humano, null);
+});
+
+Deno.test("resposta vazia passando para humano: usa a mensagem de passagem", async () => {
+  const t = montar({ resposta: "", passar_para_humano: true, motivo: "x", intencao: "outro" });
+  assertEquals(await processarMensagem(t.deps, "c1", msg()), "passado_para_humano");
+  assertEquals(t.enviados.length, 1);
 });

@@ -19,7 +19,16 @@ import {
   type ItemHistorico,
 } from "./llm.ts";
 import type { ArmazemSessao, Sessao } from "./disponibilidade.ts";
-import type { Proposta, RepositorioPropostas } from "./agendamento.ts";
+import type {
+  Proposta,
+  PropostaRecente,
+  RepositorioPropostas,
+} from "./agendamento.ts";
+import {
+  MAX_LEMBRETES,
+  type PropostaParaLembrete,
+  type RepositorioLembretes,
+} from "./lembrete.ts";
 
 export function clienteServico(): SupabaseClient {
   return createClient(
@@ -456,6 +465,8 @@ type LinhaAgendamento = {
   nome_cliente: string;
   expira_em: string;
   criado_em: string;
+  status?: string;
+  atualizado_em?: string;
 };
 
 function paraProposta(r: LinhaAgendamento): Proposta {
@@ -512,6 +523,23 @@ export class RepositorioPropostasSupabase implements RepositorioPropostas {
     return paraProposta(r);
   }
 
+  async recente(conversaId: string): Promise<PropostaRecente | null> {
+    const r = checar(
+      await this.db
+        .from("salao_agendamentos")
+        .select("*")
+        .eq("conversa_id", conversaId)
+        .order("criado_em", { ascending: false })
+        .limit(1),
+    ) as LinhaAgendamento[];
+    if (!r[0]) return null;
+    return {
+      ...paraProposta(r[0]),
+      status: r[0].status ?? "",
+      atualizadoEm: new Date(r[0].atualizado_em ?? r[0].criado_em).getTime(),
+    };
+  }
+
   async pendente(conversaId: string): Promise<Proposta | null> {
     const r = checar(
       await this.db
@@ -555,5 +583,67 @@ export class RepositorioPropostasSupabase implements RepositorioPropostas {
       .gte("atualizado_em", desde.toISOString());
     if (error) throw error;
     return count ?? 0;
+  }
+}
+
+/** Propostas aguardando comprovante, para os lembretes a cada 7 minutos. */
+export class LembretesSupabase implements RepositorioLembretes {
+  constructor(private db: SupabaseClient) {}
+
+  async listar(): Promise<PropostaParaLembrete[]> {
+    const r = checar(
+      await this.db
+        .from("salao_agendamentos")
+        .select(
+          "id, conversa_id, nome_cliente, servico_nome, data, hora, preco, criado_em, expira_em, lembretes, salao_conversas(wa_id, bot_pausado)",
+        )
+        .eq("status", "proposto")
+        .lt("lembretes", MAX_LEMBRETES)
+        .gt("expira_em", new Date().toISOString()),
+    ) as Array<
+      LinhaAgendamento & {
+        lembretes: number;
+        salao_conversas:
+          | { wa_id: string; bot_pausado: boolean }
+          | Array<{ wa_id: string; bot_pausado: boolean }>
+          | null;
+      }
+    >;
+    return r.flatMap((x) => {
+      const c = Array.isArray(x.salao_conversas)
+        ? x.salao_conversas[0]
+        : x.salao_conversas;
+      if (!c) return [];
+      return [
+        {
+          id: x.id,
+          conversaId: x.conversa_id,
+          waId: c.wa_id,
+          botPausado: c.bot_pausado,
+          nomeCliente: x.nome_cliente,
+          servicoNome: x.servico_nome,
+          data: x.data,
+          hora: x.hora,
+          preco: x.preco,
+          criadoEm: new Date(x.criado_em).getTime(),
+          expiraEm: new Date(x.expira_em).getTime(),
+          lembretes: Number(x.lembretes),
+        },
+      ];
+    });
+  }
+
+  /** Marca o lembrete como enviado antes de mandar; false se outra execução já pegou. */
+  async reservar(id: string, atual: number): Promise<boolean> {
+    const r = checar(
+      await this.db
+        .from("salao_agendamentos")
+        .update({ lembretes: atual + 1 })
+        .eq("id", id)
+        .eq("lembretes", atual)
+        .eq("status", "proposto")
+        .select("id"),
+    ) as unknown[];
+    return r.length > 0;
   }
 }

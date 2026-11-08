@@ -19,6 +19,7 @@ import {
 import { ConsultaMinhaAgenda } from "../_shared/disponibilidade.ts";
 import {
   AgendadorMinhaAgenda,
+  contextoDoAgendamento,
   montarFerramentas,
   receberComprovante,
 } from "../_shared/agendamento.ts";
@@ -181,14 +182,14 @@ export async function tratar(req: Request): Promise<Response> {
               m.tipo,
             )
         : undefined,
-    propostaPendente: propostas
-      ? async (conversaId) => {
-          const p = await propostas.pendente(
+    contextoAgendamento: propostas
+      ? (conversaId) =>
+          contextoDoAgendamento(
+            propostas,
             conversaId,
-          );
-          if (!p || p.expiraEm < Date.now()) return null;
-          return `${p.servicoNome}, ${p.data} às ${p.hora} com ${p.profissionalNome}${p.preco ? `, ${p.preco}` : ""}, no nome de ${p.nomeCliente}`;
-        }
+            new Date(),
+            (ms) => new Promise((r) => setTimeout(r, ms)),
+          )
       : undefined,
     log: logar,
   };

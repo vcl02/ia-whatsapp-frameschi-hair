@@ -112,10 +112,10 @@ Deno.test("se o modelo ignora a última chamada sem ferramentas e insiste em con
 Deno.test("proposta pendente entra no contexto da IA (o histórico não tem as chamadas de ferramenta)", async () => {
   const { blocoContexto } = await import("../functions/_shared/llm.ts");
   const t = new Date("2026-11-07T12:00:00Z");
-  assertStringIncludes(blocoContexto(t, "Ana", "Hidratação, 2026-11-11 às 09:00 com Bruna"), "peça o comprovante");
+  assertStringIncludes(blocoContexto(t, "Ana", "Proposta pendente: Hidratação, 2026-11-11 às 09:00 com Bruna"), "Proposta pendente: Hidratação");
   assertEquals(blocoContexto(t, "Ana").includes("Proposta pendente"), false);
   const a = clienteFalso([respostaFinal("ok")]);
-  await new AtendenteClaude("x", () => t, a.cliente).responder([{ autor: "cliente", texto: "SIM" }], SERVICOS_COM_ID, SALAO, { propostaPendente: "Banho de Lua, 2026-11-10 às 09:00 com Bruna" });
+  await new AtendenteClaude("x", () => t, a.cliente).responder([{ autor: "cliente", texto: "SIM" }], SERVICOS_COM_ID, SALAO, { contextoAgendamento: "Banho de Lua, 2026-11-10 às 09:00 com Bruna" });
   assertStringIncludes((a.pedidos[0].system as Array<{ text: string }>)[1].text, "Banho de Lua, 2026-11-10 às 09:00 com Bruna");
 });
 

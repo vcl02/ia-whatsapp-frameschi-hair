@@ -1,6 +1,6 @@
 import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1.0.13";
 import {
-  AgendadorMinhaAgenda, DEF_PROPOR, dataCurta, montarFerramentas, receberComprovante, sinalDoServico, telefoneNacional, valorDoPreco,
+  AgendadorMinhaAgenda, DEF_PROPOR, contextoDoAgendamento, dataCurta, montarFerramentas, receberComprovante, sinalDoServico, telefoneNacional, valorDoPreco,
   type DepsComprovante, type DepsFerramentas, type PedidoAgendamento, type Proposta, type RepositorioPropostas,
 } from "../functions/_shared/agendamento.ts";
 import type { Agenda } from "../functions/_shared/disponibilidade.ts";
@@ -72,6 +72,11 @@ class PropostasMemoria implements RepositorioPropostas {
     return Promise.resolve(!!x);
   }
   agendadosDesde(c: string) { return Promise.resolve(this.itens.filter((x) => x.conversaId === c && x.status === "agendado").length); }
+  recente(c: string) {
+    const x = [...this.itens].reverse().find((i) => i.conversaId === c);
+    return Promise.resolve(x ? { ...x, atualizadoEm: this.atualizadoEm ?? x.criadoEm } : null);
+  }
+  atualizadoEm?: number;
 }
 
 const AGORA = new Date("2026-11-07T12:00:00Z");
@@ -224,4 +229,30 @@ Deno.test("nova proposta substitui a anterior e o comprovante agenda a última",
   assertEquals(c.propostas.itens.map((i) => i.status), ["substituido", "proposto"]);
   await c.comprovante();
   assertEquals(c.agendados[0].hora, "11:00");
+});
+
+Deno.test("contexto da IA: proposta pendente, agendamento recente e nada", async () => {
+  const c = cenario();
+  const sem = () => Promise.resolve();
+  assertEquals(await contextoDoAgendamento(c.propostas, "c1", AGORA, sem), null);
+  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
+  assertStringIncludes((await contextoDoAgendamento(c.propostas, "c1", AGORA, sem))!, "aguardando o comprovante");
+  await c.comprovante();
+  c.propostas.atualizadoEm = AGORA.getTime();
+  const feito = (await contextoDoAgendamento(c.propostas, "c1", new Date(AGORA.getTime() + 60_000), sem))!;
+  assertStringIncludes(feito, "acabou de agendar");
+  assertStringIncludes(feito, "deixe \"resposta\" vazia");
+  // 10 minutos depois já é conversa normal
+  assertEquals(await contextoDoAgendamento(c.propostas, "c1", new Date(AGORA.getTime() + 10 * 60_000), sem), null);
+});
+
+Deno.test("contexto da IA: espera o comprovante em processamento terminar", async () => {
+  const c = cenario();
+  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
+  c.propostas.itens[0].status = "agendando";
+  let esperas = 0;
+  const esperar = () => { esperas++; if (esperas === 2) c.propostas.itens[0].status = "agendado"; return Promise.resolve(); };
+  c.propostas.atualizadoEm = AGORA.getTime();
+  assertStringIncludes((await contextoDoAgendamento(c.propostas, "c1", AGORA, esperar))!, "acabou de agendar");
+  assertEquals(esperas, 2);
 });

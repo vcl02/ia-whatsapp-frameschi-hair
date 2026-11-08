@@ -163,7 +163,14 @@ export interface Proposta {
   criadoEm: number; // epoch ms
 }
 
+export interface PropostaRecente extends Proposta {
+  status: string;
+  atualizadoEm: number; // epoch ms
+}
+
 export interface RepositorioPropostas {
+  /** Proposta mais recente da conversa, de qualquer status. */
+  recente(conversaId: string): Promise<PropostaRecente | null>;
   /** Grava a proposta e marca como "substituido" qualquer proposta pendente anterior da conversa. */
   criar(p: Omit<Proposta, "id" | "criadoEm">): Promise<Proposta>;
   /** Proposta com status "proposto" mais recente da conversa, se houver. */
@@ -479,4 +486,39 @@ export async function receberComprovante(
     acao: "responder",
     texto: `Recebi seu comprovante, ${proposta.nomeCliente}! 💖 Seu horário de ${servico} está agendado para ${dataCurta(proposta.data)}, às ${proposta.hora}, com a ${proposta.profissionalNome}. A Bruna confere o Pix e, se precisar de algo, chama você por aqui.`,
   };
+}
+
+// ---------- o que a IA precisa saber sobre o agendamento da conversa ----------
+
+const JANELA_AGENDADO_RECENTE_MS = 3 * 60_000;
+
+/**
+ * Texto para o contexto da IA: proposta aguardando comprovante, ou agendamento feito
+ * agora há pouco (para ela não repetir a confirmação que o sistema já mandou).
+ * Se o comprovante está sendo processado, espera terminar (até ~20 s).
+ */
+export async function contextoDoAgendamento(
+  repo: Pick<RepositorioPropostas, "recente">,
+  conversaId: string,
+  agora: Date,
+  esperar: (ms: number) => Promise<void>,
+): Promise<string | null> {
+  let r = await repo.recente(conversaId);
+  for (let i = 0; r?.status === "agendando" && i < 5; i++) {
+    await esperar(4000);
+    r = await repo.recente(conversaId);
+  }
+  if (!r) return null;
+  const servico = r.servicoNome.replace(/\s*\(a partir de\)/i, "");
+  const resumo = `${servico}, ${r.data} às ${r.hora} com ${r.profissionalNome}, no nome de ${r.nomeCliente}`;
+  if (r.status === "proposto" && r.expiraEm >= agora.getTime()) {
+    return `Proposta pendente desta conversa, registrada pelo sistema, aguardando o comprovante do Pix e AINDA NÃO agendada: ${resumo}. Se a cliente perguntar ou disser que pagou, peça o comprovante (imagem ou PDF) aqui na conversa. Nunca diga que está agendado: o sistema agenda sozinho quando o comprovante chega.`;
+  }
+  if (
+    r.status === "agendado" &&
+    agora.getTime() - r.atualizadoEm <= JANELA_AGENDADO_RECENTE_MS
+  ) {
+    return `O sistema acabou de agendar (${resumo}) depois de receber o comprovante, e a mensagem de confirmação já foi enviada à cliente. Não repita a confirmação nem o resumo e não peça comprovante. Responda só se ela perguntar algo; se a mensagem for apenas um agradecimento ou um aviso de que mandou o comprovante, deixe "resposta" vazia.`;
+  }
+  return null;
 }

@@ -60,11 +60,11 @@ export interface OpcoesResposta {
   /** Nome no perfil do WhatsApp (usado para agendar). */
   nomeCliente?: string | null;
   /**
-   * Proposta de agendamento pendente desta conversa, descrita em texto. O histórico só
-   * tem as mensagens (não as chamadas de ferramenta), então sem isto o modelo não sabe
-   * que a proposta existe e o que está esperando da cliente.
+   * Situação do agendamento desta conversa (proposta aguardando comprovante ou
+   * agendamento recém-feito), já em texto. O histórico só tem as mensagens (não as
+   * chamadas de ferramenta nem o que o sistema fez), então sem isto o modelo não sabe.
    */
-  propostaPendente?: string | null;
+  contextoAgendamento?: string | null;
 }
 
 /** Interface para permitir testes sem chamar a API. */
@@ -178,15 +178,13 @@ export function agoraEmSaoPaulo(agora: Date = new Date()): string {
 export function blocoContexto(
   agora: Date,
   nomeCliente: string | null | undefined,
-  propostaPendente?: string | null,
+  contextoAgendamento?: string | null,
 ): string {
   const nome = nomeCliente?.trim()
     ? `Nome da cliente no perfil do WhatsApp: ${nomeCliente.trim()}.`
     : "A cliente não tem nome no perfil do WhatsApp: pergunte o nome antes de propor um agendamento.";
-  const proposta = propostaPendente
-    ? `\nProposta pendente desta conversa, registrada pelo sistema, aguardando o comprovante do Pix e AINDA NÃO agendada: ${propostaPendente}. Se a cliente perguntar ou disser que pagou, peça o comprovante (imagem ou PDF) aqui na conversa. Nunca diga que está agendado: o sistema agenda sozinho quando o comprovante chega.`
-    : "";
-  return `${blocoAgora(agora)}\n${nome}${proposta}`;
+  const agendamento = contextoAgendamento ? `\n${contextoAgendamento}` : "";
+  return `${blocoAgora(agora)}\n${nome}${agendamento}`;
 }
 
 export function blocoAgora(agora: Date = new Date()): string {
@@ -256,7 +254,7 @@ export class AtendenteClaude implements Atendente {
     salao: DadosSalao,
     opcoes: OpcoesResposta = {},
   ): Promise<DecisaoLLM> {
-    const { ferramentas, nomeCliente, modelo, esforco, propostaPendente } =
+    const { ferramentas, nomeCliente, modelo, esforco, contextoAgendamento } =
       opcoes;
     const messages: Anthropic.Beta.Messages.BetaMessageParam[] =
       montarMensagens(historico);
@@ -271,7 +269,7 @@ export class AtendenteClaude implements Atendente {
       },
       {
         type: "text",
-        text: blocoContexto(this.relogio(), nomeCliente, propostaPendente),
+        text: blocoContexto(this.relogio(), nomeCliente, contextoAgendamento),
       },
     ];
     for (let rodada = 0; rodada <= MAX_RODADAS_FERRAMENTA; rodada++) {

@@ -61,8 +61,8 @@ export interface DepsBot {
     conversa: Conversa,
     msg: MensagemRecebida,
   ) => Promise<ResultadoComprovante | null>;
-  /** Texto da proposta de agendamento pendente da conversa (ou null). */
-  propostaPendente?: (conversaId: string) => Promise<string | null>;
+  /** Situação do agendamento da conversa em texto para a IA (ou null). */
+  contextoAgendamento?: (conversaId: string) => Promise<string | null>;
   /** Número entre 0 e 1 (Math.random). Injetável para os testes. */
   aleatorio?: () => number;
   log(evento: string, dados?: Record<string, unknown>): void;
@@ -223,7 +223,9 @@ export async function processarMensagem(
   let decisao;
   try {
     const historico = await deps.repo.historico(c.id, LIMITE_HISTORICO);
-    const propostaPendente = await deps.propostaPendente?.(c.id).catch(() => null);
+    const contextoAgendamento = await deps
+      .contextoAgendamento?.(c.id)
+      .catch(() => null);
     decisao = await deps.atendente.responder(historico, servicos, salao, {
       ferramentas: deps.ferramentas?.({
         conversaId: c.id,
@@ -231,7 +233,7 @@ export async function processarMensagem(
         servicos,
       }),
       nomeCliente: c.nomePerfil,
-      propostaPendente,
+      contextoAgendamento,
       modelo: cfg.modelo,
       esforco: cfg.esforco,
     });
@@ -245,6 +247,12 @@ export async function processarMensagem(
 
   if (decisao.passar_para_humano) {
     await marcarEAvisar(deps, c, decisao.motivo || "decisão da IA");
+  }
+  // Resposta vazia sem passar para humano = não há nada a dizer (ex.: a cliente só
+  // agradeceu logo depois do agendamento): não manda nada.
+  if (!decisao.resposta.trim() && !decisao.passar_para_humano) {
+    deps.log("resposta_vazia", { conversa: c.id, intencao: decisao.intencao });
+    return "ignorado";
   }
   const texto =
     decisao.resposta.trim() ||
