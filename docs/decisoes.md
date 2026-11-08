@@ -154,3 +154,6 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
 - Fim da reserva: se os 30 min passam sem comprovante, a proposta vira "expirado" e a
   cliente recebe um último aviso de que o horário não foi agendado (só se a IA da
   conversa não estiver pausada).
+- Parágrafos (2026-11-08): a regra de "um único parágrafo" foi revertida a pedido do
+  Victor. A IA volta a dividir em parágrafos curtos, e a apresentação da primeira
+  resposta e a explicação de por que chama a Bruna ficam em parágrafo próprio.

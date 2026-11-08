@@ -72,7 +72,7 @@ Deno.test("primeira resposta da conversa leva a apresentação", async () => {
   const t = montar(ok);
   t.repo.jaRespondeu = false;
   await processarMensagem(t.deps, "c1", msg());
-  assertEquals(t.enviados, [`${SALAO.mensagensApresentacao[0]} A escova é R$ 50!`]);
+  assertEquals(t.enviados, [`${SALAO.mensagensApresentacao[0]}\n\nA escova é R$ 50!`]);
 });
 
 Deno.test("conversa pausada: não responde nem chama a LLM", async () => {

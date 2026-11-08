@@ -23,7 +23,7 @@ Deno.test("prompt contém só os dados configurados", () => {
   assertStringIncludes(s, "Bruna Frameschi Hair");
   assertStringIncludes(s, "Nunca invente");
   assertStringIncludes(s, "Seu nome é Lia");
-  assertStringIncludes(s, "UM único parágrafo");
+  assertStringIncludes(s, "parágrafos curtos, separados por uma linha em branco");
   assertStringIncludes(s, "POR QUE está chamando a Bruna");
 });
 
