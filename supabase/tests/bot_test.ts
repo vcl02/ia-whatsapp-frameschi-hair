@@ -201,3 +201,51 @@ Deno.test("proposta pendente da conversa é passada para a IA", async () => {
   await processarMensagem(t.deps, "c1", msg({ texto: "SIM" }));
   assertEquals(recebida, "Hidratação, 2026-11-11 às 09:00 com Bruna");
 });
+
+Deno.test("comprovante (imagem) com proposta: agenda sem chamar a IA e responde", async () => {
+  const t = montar({ resposta: "x", passar_para_humano: false, motivo: "", intencao: "outro" });
+  t.deps.receberComprovante = () => Promise.resolve({ acao: "responder", texto: "Recebi seu comprovante! Agendado." });
+  const r = await processarMensagem(t.deps, "c1", msg({ tipo: "image", texto: null }));
+  assertEquals(r, "respondido");
+  assertEquals(t.llm(), 0);
+  assertEquals(t.enviados, ["Recebi seu comprovante! Agendado."]);
+  assertEquals(t.repo.humano, null);
+});
+
+Deno.test("comprovante que precisa da equipe: pausa, avisa e responde", async () => {
+  const t = montar({ resposta: "x", passar_para_humano: false, motivo: "", intencao: "outro" });
+  t.deps.receberComprovante = () => Promise.resolve({ acao: "humano", texto: "Vou chamar a Bruna.", motivo: "horário ocupado" });
+  const r = await processarMensagem(t.deps, "c1", msg({ tipo: "document", texto: null }));
+  assertEquals(r, "passado_para_humano");
+  assertEquals(t.avisos, ["horário ocupado"]);
+  assertEquals(t.enviados, ["Vou chamar a Bruna."]);
+});
+
+Deno.test("comprovante extra depois de agendar é ignorado (sem resposta nem pausa)", async () => {
+  const t = montar({ resposta: "x", passar_para_humano: false, motivo: "", intencao: "outro" });
+  t.deps.receberComprovante = () => Promise.resolve({ acao: "ignorar" });
+  assertEquals(await processarMensagem(t.deps, "c1", msg({ tipo: "image", texto: null })), "ignorado");
+  assertEquals(t.enviados, []);
+  assertEquals(t.repo.humano, null);
+});
+
+Deno.test("imagem sem proposta pendente continua chamando a equipe", async () => {
+  const t = montar({ resposta: "x", passar_para_humano: false, motivo: "", intencao: "outro" });
+  t.deps.receberComprovante = () => Promise.resolve(null);
+  assertEquals(await processarMensagem(t.deps, "c1", msg({ tipo: "image", texto: null })), "passado_para_humano");
+  assertEquals(t.llm(), 0);
+});
+
+Deno.test("comprovante processado mesmo se chegou outra mensagem depois dele", async () => {
+  const t = montar({ resposta: "x", passar_para_humano: false, motivo: "", intencao: "outro" });
+  t.repo.ultima = "wamid.outra"; // chegou mensagem mais recente
+  t.deps.receberComprovante = () => Promise.resolve({ acao: "responder", texto: "Agendado." });
+  assertEquals(await processarMensagem(t.deps, "c1", msg({ tipo: "image", texto: null })), "respondido");
+});
+
+Deno.test("falha ao processar o comprovante chama a equipe", async () => {
+  const t = montar({ resposta: "x", passar_para_humano: false, motivo: "", intencao: "outro" });
+  t.deps.receberComprovante = () => Promise.reject(new Error("banco fora"));
+  assertEquals(await processarMensagem(t.deps, "c1", msg({ tipo: "image", texto: null })), "passado_para_humano");
+  assertEquals(t.avisos, ["falha ao processar o comprovante"]);
+});

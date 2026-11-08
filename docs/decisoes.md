@@ -107,7 +107,7 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
 - Equipe no prompt: Alessandra (manicure e pedicure), Bruna (cabelo, massagem e
   o resto).
 
-## 2026-11-07 — Agendamento pelo bot (com confirmação da cliente)
+## 2026-11-07 — Agendamento pelo bot (com confirmação da cliente; confirmação por "SIM" substituída em 2026-11-08, veja abaixo)
 - Bruna de acordo; aviso por e-mail ao Victor a cada agendamento.
 - Duas etapas: `propor_agendamento` confere a vaga (sem cache) e grava uma
   proposta em `salao_agendamentos` (vale 10 min; nova proposta substitui a
@@ -122,3 +122,24 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
   humano (o Minha Agenda não deixa a cliente cancelar sozinha).
 - Falha no agendamento => link + passar para humano. `SALAO_AGENDAR=nao`
   desliga só o agendamento.
+
+## 2026-11-08 — Sinal de 20% por Pix confirma o agendamento (substitui o "SIM")
+- Pedido do Victor: em vez de "SIM", a cliente paga 20% por Pix e manda o
+  comprovante; o sistema NÃO lê o comprovante, só vê que chegou imagem ou PDF.
+- `propor_agendamento` grava a proposta (agora vale **30 min**) e devolve resumo,
+  valor do sinal e chave Pix para a IA mandar. A IA não tem mais ferramenta para
+  agendar (`confirmar_agendamento` e `ehConfirmacao` foram removidos): quem agenda
+  é `receberComprovante` (código), quando chega `image` ou `document` numa
+  conversa com proposta pendente.
+- Sinal = 20% do preço; "a partir de" usa o valor mínimo e a IA avisa que a Bruna
+  confirma o valor final. Sem valor legível ou sem chave Pix configurada: não
+  propõe, chama a Bruna.
+- Chave Pix e titular ficam em secrets do Supabase (`SALAO_PIX_CHAVE`,
+  `SALAO_PIX_TITULAR`), não no repositório.
+- Limite conhecido: qualquer imagem/PDF conta. A Bruna precisa conferir o Pix no
+  banco; o e-mail de cada agendamento pede isso. A IA nunca diz "pagamento
+  confirmado".
+- Prazo vencido, horário ocupado, erro, ou 2º agendamento no dia: o comprovante
+  vai para a equipe (pode ter dinheiro envolvido). Segundo comprovante logo depois
+  de agendar é ignorado. Imagem sem proposta pendente continua chamando a equipe.
+- Reconsulta a vaga ao propor e de novo ao receber o comprovante.

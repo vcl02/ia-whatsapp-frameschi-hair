@@ -1,17 +1,24 @@
 import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1.0.13";
 import {
-  AgendadorMinhaAgenda, DEF_CONFIRMAR, DEF_PROPOR, ehConfirmacao, montarFerramentas, telefoneNacional,
-  type DepsFerramentas, type PedidoAgendamento, type Proposta, type RepositorioPropostas,
+  AgendadorMinhaAgenda, DEF_PROPOR, dataCurta, montarFerramentas, receberComprovante, sinalDoServico, telefoneNacional, valorDoPreco,
+  type DepsComprovante, type DepsFerramentas, type PedidoAgendamento, type Proposta, type RepositorioPropostas,
 } from "../functions/_shared/agendamento.ts";
 import type { Agenda } from "../functions/_shared/disponibilidade.ts";
 
-Deno.test("confirmação: aceita sim claros e recusa dúvida ou negação", () => {
-  for (const t of ["sim", "Sim!", "SIM pode", "s", "pode marcar", "Confirmo", "ok", "isso mesmo", "👍", "pode sim, obrigada"]) {
-    assertEquals(ehConfirmacao(t), true, t);
-  }
-  for (const t of ["não", "nao, prefiro outro", "sim, mas não agora", "talvez", "qual o preço?", "", null, "pera", "simone", "quero às 9 com a Bruna", "quero", "sim, às 11", "sim mas com a Alessandra"]) {
-    assertEquals(ehConfirmacao(t), false, String(t));
-  }
+Deno.test("sinal de 20%: valor do preço em texto, 'a partir de' usa o mínimo", () => {
+  assertEquals(valorDoPreco("R$ 30,00"), 30);
+  assertEquals(valorDoPreco("A partir de R$ 1.250,50"), 1250.5);
+  assertEquals(valorDoPreco("sob consulta"), null);
+  assertEquals(valorDoPreco(null), null);
+  assertEquals(sinalDoServico("R$ 20,00"), { texto: "R$ 4,00", aPartirDe: false });
+  assertEquals(sinalDoServico("A partir de R$ 60,00"), { texto: "R$ 12,00", aPartirDe: true });
+  assertEquals(sinalDoServico("R$ 450,00", "Progressiva (A partir de)"), { texto: "R$ 90,00", aPartirDe: true });
+  assertEquals(sinalDoServico("R$ 33,33")?.texto, "R$ 6,67");
+  assertEquals(sinalDoServico("consultar"), null);
+});
+
+Deno.test("data curta com dia da semana", () => {
+  assertEquals(dataCurta("2026-11-11"), "quarta-feira, 11/11");
 });
 
 Deno.test("telefone nacional a partir do wa_id", () => {
@@ -48,10 +55,10 @@ Deno.test("agendador: resposta sem CREATED é erro", async () => {
   assertStringIncludes(erro, "não criou");
 });
 
-// ---------- fluxo propor -> confirmar ----------
+// ---------- fluxo propor -> comprovante ----------
 
 class PropostasMemoria implements RepositorioPropostas {
-  itens: Array<Proposta & { status: string }> = [];
+  itens: Array<Proposta & { status: string; detalhe?: string }> = [];
   criar(p: Omit<Proposta, "id" | "criadoEm">) {
     for (const x of this.itens) if (x.conversaId === p.conversaId && x.status === "proposto") x.status = "substituido";
     const n = { ...p, id: `p${this.itens.length + 1}`, status: "proposto", criadoEm: AGORA.getTime() };
@@ -59,139 +66,149 @@ class PropostasMemoria implements RepositorioPropostas {
     return Promise.resolve(n);
   }
   pendente(c: string) { return Promise.resolve([...this.itens].reverse().find((x) => x.conversaId === c && x.status === "proposto") ?? null); }
-  mudarStatus(id: string, de: string, para: string) {
+  mudarStatus(id: string, de: string, para: string, detalhe?: string) {
     const x = this.itens.find((i) => i.id === id && i.status === de);
-    if (x) x.status = para;
+    if (x) { x.status = para; if (detalhe) x.detalhe = detalhe; }
     return Promise.resolve(!!x);
   }
   agendadosDesde(c: string) { return Promise.resolve(this.itens.filter((x) => x.conversaId === c && x.status === "agendado").length); }
 }
 
 const AGORA = new Date("2026-11-07T12:00:00Z");
-const SERVICOS = [{ origem_id: 5732343, nome: "Banho de Lua", preco: "R$ 30,00" }];
+const SERVICOS = [
+  { origem_id: 5732343, nome: "Banho de Lua", preco: "R$ 30,00" },
+  { origem_id: 9, nome: "Progressiva (A partir de)", preco: "R$ 450,00" },
+  { origem_id: 8, nome: "Sob consulta", preco: "consultar" },
+];
+const PIX = { chave: "11999990000", titular: "Bruna Frameschi" };
 
-function cenario(ultimaMensagem: string, opcoes: { livre?: boolean; falharAgendamento?: boolean } = {}) {
+function cenario(opcoes: { livre?: boolean; falharAgendamento?: boolean; semPix?: boolean } = {}) {
   const propostas = new PropostasMemoria();
   const agendados: PedidoAgendamento[] = [];
-  const avisos: string[] = [];
+  const avisos: Array<[string, string]> = [];
   let livre = opcoes.livre ?? true;
-  const deps: DepsFerramentas = {
-    consulta: { vagas: (_s, data): Promise<Agenda> => Promise.resolve({ data, feriado: false, profissionais: [
-      { id: 486643, nome: "Bruna", horarios: livre ? ["09:00", "11:00"] : ["11:00"] },
-      { id: 1001243, nome: "Alessandra", horarios: [] },
-    ] }) },
-    agendador: { agendar: (p) => opcoes.falharAgendamento ? Promise.reject(new Error("HTTP 409")) : (agendados.push(p), Promise.resolve()) },
-    propostas,
-    avisar: (a) => (avisos.push(a), Promise.resolve()),
-    log: () => {},
-    maxDias: 15,
-    agora: () => AGORA,
-  };
-  // Por padrão a mensagem da cliente chega 1 min depois da proposta (resposta seguinte).
-  const ctx = (msg: string, em: Date) => ({ conversaId: "c1", waId: "5511992090474", ultimaMensagem: msg, ultimaMensagemEm: em, servicos: SERVICOS });
+  let agoraAtual = AGORA;
+  const consulta = { vagas: (_s: number, data: string): Promise<Agenda> => Promise.resolve({ data, feriado: false, profissionais: [
+    { id: 486643, nome: "Bruna", horarios: livre ? ["09:00", "11:00"] : ["11:00"] },
+    { id: 1001243, nome: "Alessandra", horarios: [] },
+  ] }) };
+  const agendador = { agendar: (p: PedidoAgendamento) => opcoes.falharAgendamento ? Promise.reject(new Error("HTTP 409")) : (agendados.push(p), Promise.resolve()) };
+  const comuns = { avisar: (a: string, t: string) => (avisos.push([a, t]), Promise.resolve()), log: () => {}, agora: () => agoraAtual };
+  const deps: DepsFerramentas = { consulta, agendador, propostas, pix: opcoes.semPix ? undefined : PIX, maxDias: 15, ...comuns };
+  const depsComp: DepsComprovante = { consulta, agendador, propostas, ...comuns };
   return {
     propostas, agendados, avisos,
-    ferramentas: (msg = ultimaMensagem, em = new Date(AGORA.getTime() + 60_000)) => montarFerramentas(ctx(msg, em), deps),
+    ferramentas: () => montarFerramentas({ conversaId: "c1", waId: "5511992090474", servicos: SERVICOS }, deps),
+    comprovante: (tipo = "image", conversa = "c1") => receberComprovante({ conversaId: conversa, waId: "5511992090474" }, depsComp, tipo),
     ocupar: () => { livre = false; },
+    avancar: (ms: number) => { agoraAtual = new Date(agoraAtual.getTime() + ms); },
   };
 }
 
 const PROPOSTA = { servico_id: 5732343, data: "2026-11-10", hora: "09:00", profissional: "Bruna", nome_cliente: "Isa" };
 
-Deno.test("oferece as três ferramentas quando o agendamento está ligado", () => {
-  const nomes = cenario("oi").ferramentas().definicoes.map((d) => d.name);
-  assertEquals(nomes, ["consultar_horarios", DEF_PROPOR.name, DEF_CONFIRMAR.name]);
+Deno.test("oferece consulta e proposta (a IA não tem ferramenta para agendar)", () => {
+  assertEquals(cenario().ferramentas().definicoes.map((d) => d.name), ["consultar_horarios", DEF_PROPOR.name]);
 });
 
 Deno.test("só consulta quando o agendamento está desligado", async () => {
-  const f = montarFerramentas({ conversaId: "c1", waId: "5511992090474", ultimaMensagem: "sim", ultimaMensagemEm: AGORA, servicos: SERVICOS },
+  const f = montarFerramentas({ conversaId: "c1", waId: "5511992090474", servicos: SERVICOS },
     { consulta: { vagas: () => Promise.reject(new Error("x")) }, avisar: () => Promise.resolve(), log: () => {}, maxDias: 15, agora: () => AGORA });
   assertEquals(f.definicoes.map((d) => d.name), ["consultar_horarios"]);
   assertStringIncludes(await f.executar("confirmar_agendamento", {}), "desconhecida");
 });
 
-Deno.test("fluxo feliz: propõe, cliente diz sim, agenda e avisa", async () => {
-  const c = cenario("quero às 9 com a Bruna");
-  const r1 = await c.ferramentas().executar("propor_agendamento", PROPOSTA);
-  assertStringIncludes(r1, "Ainda NÃO está agendado");
+Deno.test("proposta devolve resumo, sinal de 20% e chave Pix, e não agenda", async () => {
+  const c = cenario();
+  const r = await c.ferramentas().executar("propor_agendamento", PROPOSTA);
+  assertStringIncludes(r, "R$ 6,00");
+  assertStringIncludes(r, "11999990000");
+  assertStringIncludes(r, "Bruna Frameschi");
+  assertStringIncludes(r, "Ainda NÃO está agendado");
   assertEquals(c.agendados.length, 0);
-  const r2 = await c.ferramentas("Sim!").executar("confirmar_agendamento", {});
-  assertStringIncludes(r2, "AGENDADO");
-  assertEquals(c.agendados[0], { nome: "Isa", telefone: "11992090474", profissionalId: 486643, servicoId: 5732343, data: "2026-11-10", hora: "09:00", comentario: "Agendado pelo assistente virtual do WhatsApp" });
-  assertEquals(c.avisos.length, 1);
+  assertEquals(c.propostas.itens[0].expiraEm, AGORA.getTime() + 30 * 60_000);
+});
+
+Deno.test("serviço 'a partir de': sinal sobre o mínimo, avisando que a Bruna confirma", async () => {
+  const r = await cenario().ferramentas().executar("propor_agendamento", { ...PROPOSTA, servico_id: 9 });
+  assertStringIncludes(r, "R$ 90,00");
+  assertStringIncludes(r, "valor mínimo");
+});
+
+Deno.test("sem chave Pix ou sem valor legível: não propõe, chama a Bruna", async () => {
+  assertStringIncludes(await cenario({ semPix: true }).ferramentas().executar("propor_agendamento", PROPOSTA), "passar_para_humano = true");
+  const c = cenario();
+  assertStringIncludes(await c.ferramentas().executar("propor_agendamento", { ...PROPOSTA, servico_id: 8 }), "calcular o sinal");
+  assertEquals(c.propostas.itens.length, 0);
+});
+
+Deno.test("comprovante com proposta pendente: agenda, avisa a equipe e responde", async () => {
+  const c = cenario();
+  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
+  const r = await c.comprovante("image");
+  assertEquals(r?.acao, "responder");
+  assertStringIncludes((r as { texto: string }).texto, "terça-feira, 10/11");
+  assertEquals(c.agendados[0], { nome: "Isa", telefone: "11992090474", profissionalId: 486643, servicoId: 5732343, data: "2026-11-10", hora: "09:00", comentario: "Agendado pelo assistente virtual do WhatsApp (sinal Pix)" });
   assertEquals(c.propostas.itens[0].status, "agendado");
+  assertEquals(c.propostas.itens[0].detalhe, "comprovante recebido (image)");
+  assertEquals(c.avisos.length, 1);
+  assertStringIncludes(c.avisos[0][1], "confira o Pix");
+  assertStringIncludes(c.avisos[0][1], "R$ 6,00");
 });
 
-Deno.test("TRAVA: sem 'sim' da cliente não agenda, mesmo que o modelo peça", async () => {
-  const c = cenario("x");
+Deno.test("segundo comprovante logo depois de agendar é ignorado", async () => {
+  const c = cenario();
   await c.ferramentas().executar("propor_agendamento", PROPOSTA);
-  const r = await c.ferramentas("qual o endereço?").executar("confirmar_agendamento", {});
-  assertStringIncludes(r, "Nada foi agendado");
-  assertEquals(c.agendados.length, 0);
-  assertEquals(c.propostas.itens[0].status, "proposto");
-});
-
-Deno.test("TRAVA: propor e confirmar na mesma resposta não agenda (caso real de 07/11)", async () => {
-  // A cliente escolheu o horário e o modelo chamou as duas ferramentas seguidas.
-  const c = cenario("x");
-  const f = c.ferramentas("sim");
-  await f.executar("propor_agendamento", PROPOSTA);
-  assertStringIncludes(await f.executar("confirmar_agendamento", {}), "ainda não viu o resumo");
-  assertEquals(c.agendados.length, 0);
-  assertEquals(c.propostas.itens[0].status, "proposto");
-});
-
-Deno.test("TRAVA: proposta feita depois da última mensagem da cliente não agenda", async () => {
-  const c = cenario("x");
-  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
-  assertStringIncludes(await c.ferramentas("sim", new Date(AGORA.getTime() - 1000)).executar("confirmar_agendamento", {}), "não respondeu ao resumo");
-  assertEquals(c.agendados.length, 0);
-});
-
-Deno.test("TRAVA: sem proposta pendente não agenda", async () => {
-  const c = cenario("sim");
-  assertStringIncludes(await c.ferramentas().executar("confirmar_agendamento", {}), "não há proposta");
-  assertEquals(c.agendados.length, 0);
-});
-
-Deno.test("TRAVA: proposta vencida não agenda", async () => {
-  const c = cenario("x");
-  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
-  c.propostas.itens[0].expiraEm = AGORA.getTime() - 1;
-  assertStringIncludes(await c.ferramentas("sim").executar("confirmar_agendamento", {}), "expirou");
-  assertEquals(c.agendados.length, 0);
-});
-
-Deno.test("TRAVA: um agendamento por conversa por dia", async () => {
-  const c = cenario("x");
-  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
-  await c.ferramentas("sim").executar("confirmar_agendamento", {});
-  await c.ferramentas().executar("propor_agendamento", { ...PROPOSTA, hora: "11:00" });
-  assertStringIncludes(await c.ferramentas("sim").executar("confirmar_agendamento", {}), "já teve um agendamento");
+  await c.comprovante("image");
+  assertEquals(await c.comprovante("document"), { acao: "ignorar" });
   assertEquals(c.agendados.length, 1);
 });
 
-Deno.test("horário ocupado entre a proposta e o sim: não agenda e oferece outros", async () => {
-  const c = cenario("x");
+Deno.test("imagem sem proposta pendente: devolve null (segue o caminho normal)", async () => {
+  assertEquals(await cenario().comprovante(), null);
+});
+
+Deno.test("proposta vencida: não agenda e chama a Bruna", async () => {
+  const c = cenario();
+  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
+  c.avancar(31 * 60_000);
+  const r = await c.comprovante();
+  assertEquals(r?.acao, "humano");
+  assertEquals(c.agendados.length, 0);
+  assertEquals(c.propostas.itens[0].status, "expirado");
+});
+
+Deno.test("horário ocupado entre a proposta e o comprovante: não agenda e chama a Bruna", async () => {
+  const c = cenario();
   await c.ferramentas().executar("propor_agendamento", PROPOSTA);
   c.ocupar();
-  const r = await c.ferramentas("sim").executar("confirmar_agendamento", {});
-  assertStringIncludes(r, "ocupado antes da confirmação");
+  const r = await c.comprovante();
+  assertEquals(r?.acao, "humano");
+  assertStringIncludes((r as { motivo: string }).motivo, "Banho de Lua");
   assertEquals(c.agendados.length, 0);
   assertEquals(c.propostas.itens[0].status, "falhou");
 });
 
-Deno.test("erro do Minha Agenda: registra falha e manda para humano", async () => {
-  const c = cenario("x", { falharAgendamento: true });
+Deno.test("erro do Minha Agenda: registra falha e chama a Bruna", async () => {
+  const c = cenario({ falharAgendamento: true });
   await c.ferramentas().executar("propor_agendamento", PROPOSTA);
-  const r = await c.ferramentas("sim").executar("confirmar_agendamento", {});
-  assertStringIncludes(r, "passar_para_humano = true");
+  assertEquals((await c.comprovante())?.acao, "humano");
   assertEquals(c.propostas.itens[0].status, "falhou");
   assertEquals(c.avisos.length, 0);
 });
 
+Deno.test("um agendamento por conversa por dia, mesmo com comprovante", async () => {
+  const c = cenario();
+  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
+  await c.comprovante();
+  c.avancar(2 * 60 * 60_000); // passou a janela de "segundo comprovante" (1 h), mas não as 24 h
+  await c.ferramentas().executar("propor_agendamento", { ...PROPOSTA, hora: "11:00" });
+  assertEquals((await c.comprovante())?.acao, "humano");
+  assertEquals(c.agendados.length, 1);
+});
+
 Deno.test("proposta valida profissional, horário, nome e serviço", async () => {
-  const f = cenario("x").ferramentas();
+  const f = cenario().ferramentas();
   assertStringIncludes(await f.executar("propor_agendamento", { ...PROPOSTA, profissional: "Joana" }), "Opções: Bruna, Alessandra");
   assertStringIncludes(await f.executar("propor_agendamento", { ...PROPOSTA, hora: "10:00" }), "não está mais livre");
   assertStringIncludes(await f.executar("propor_agendamento", { ...PROPOSTA, hora: "9h" }), "HH:MM");
@@ -200,11 +217,11 @@ Deno.test("proposta valida profissional, horário, nome e serviço", async () =>
   assertStringIncludes(await f.executar("propor_agendamento", { ...PROPOSTA, data: "2026-12-30" }), "15 dias");
 });
 
-Deno.test("nova proposta substitui a anterior", async () => {
-  const c = cenario("x");
+Deno.test("nova proposta substitui a anterior e o comprovante agenda a última", async () => {
+  const c = cenario();
   await c.ferramentas().executar("propor_agendamento", PROPOSTA);
   await c.ferramentas().executar("propor_agendamento", { ...PROPOSTA, hora: "11:00" });
   assertEquals(c.propostas.itens.map((i) => i.status), ["substituido", "proposto"]);
-  await c.ferramentas("sim").executar("confirmar_agendamento", {});
+  await c.comprovante();
   assertEquals(c.agendados[0].hora, "11:00");
 });

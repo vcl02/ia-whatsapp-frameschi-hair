@@ -9,7 +9,11 @@ import {
   type Servico,
 } from "./salao.ts";
 import type { Atendente, ConfigIA, ItemHistorico } from "./llm.ts";
-import type { ContextoConversa, Ferramentas } from "./agendamento.ts";
+import type {
+  ContextoConversa,
+  Ferramentas,
+  ResultadoComprovante,
+} from "./agendamento.ts";
 
 export interface Conversa {
   id: string;
@@ -49,6 +53,14 @@ export interface DepsBot {
   esperar(ms: number): Promise<void>;
   /** Ferramentas do modelo (consultar/propor/confirmar). Ausente = desligadas. */
   ferramentas?: (ctx: ContextoConversa) => Ferramentas;
+  /**
+   * Imagem ou PDF recebido: se houver proposta pendente, agenda e devolve o que responder.
+   * Devolve null quando não há proposta (o bot segue o caminho normal).
+   */
+  receberComprovante?: (
+    conversa: Conversa,
+    msg: MensagemRecebida,
+  ) => Promise<ResultadoComprovante | null>;
   /** Texto da proposta de agendamento pendente da conversa (ou null). */
   propostaPendente?: (conversaId: string) => Promise<string | null>;
   /** Número entre 0 e 1 (Math.random). Injetável para os testes. */
@@ -60,9 +72,11 @@ export type Resultado =
   | "pausado"
   | "substituida_por_mais_recente"
   | "respondido"
+  | "ignorado"
   | "passado_para_humano";
 
 const TIPOS_TEXTO = new Set(["text", "button", "interactive"]);
+const TIPOS_COMPROVANTE = new Set(["image", "document"]);
 const PEDIDO_HUMANO =
   /\b(atendente|humano|humana|pessoa de verdade|falar com (a|o)? ?(dona|bruna|algu[eé]m))\b/i;
 export const ESPERA_AGRUPAR_MS = 4000; // junta mensagens mandadas em sequência
@@ -134,6 +148,30 @@ export async function processarMensagem(
   const c = await deps.repo.conversa(conversaId);
   if (c.botPausado) return "pausado";
 
+  // Comprovante de Pix (imagem ou PDF) de uma proposta pendente: o código agenda, sem IA.
+  // Vem antes da checagem abaixo: se a cliente mandar outra mensagem logo depois, o
+  // comprovante não pode se perder.
+  if (TIPOS_COMPROVANTE.has(msg.tipo) && deps.receberComprovante) {
+    let r: ResultadoComprovante | null;
+    try {
+      r = await deps.receberComprovante(c, msg);
+    } catch (e) {
+      deps.log("erro_comprovante", { conversa: c.id, erro: String(e) });
+      return passarParaHumano(deps, c, "falha ao processar o comprovante");
+    }
+    if (r?.acao === "ignorar") return "ignorado";
+    if (r?.acao === "responder") {
+      const envio = await enviarComApresentacao(deps, c, r.texto);
+      deps.log("comprovante_agendado", { conversa: c.id, envio_ok: envio.ok });
+      return "respondido";
+    }
+    if (r?.acao === "humano") {
+      await marcarEAvisar(deps, c, r.motivo);
+      await enviarComApresentacao(deps, c, r.texto);
+      return "passado_para_humano";
+    }
+  }
+
   // Se chegou outra mensagem depois desta, quem responde é o processamento dela.
   const ultima = await deps.repo.ultimaEntradaWamid(c.id);
   if (ultima && ultima !== msg.wamid) return "substituida_por_mais_recente";
@@ -190,8 +228,6 @@ export async function processarMensagem(
       ferramentas: deps.ferramentas?.({
         conversaId: c.id,
         waId: c.waId,
-        ultimaMensagem: msg.texto,
-        ultimaMensagemEm: msg.recebidaEm,
         servicos,
       }),
       nomeCliente: c.nomePerfil,

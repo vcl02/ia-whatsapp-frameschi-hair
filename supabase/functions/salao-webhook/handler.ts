@@ -20,6 +20,7 @@ import { ConsultaMinhaAgenda } from "../_shared/disponibilidade.ts";
 import {
   AgendadorMinhaAgenda,
   montarFerramentas,
+  receberComprovante,
 } from "../_shared/agendamento.ts";
 import { processarMensagem, type DepsBot } from "../_shared/bot.ts";
 import {
@@ -119,6 +120,24 @@ export async function tratar(req: Request): Promise<Response> {
   const agendarLigado =
     !!chaveFirebase && Deno.env.get("SALAO_AGENDAR") !== "nao";
   const aviso = lerConfigAviso((n) => Deno.env.get(n));
+  const avisarResumo = (assunto: string, texto: string) =>
+    enviarResumo(
+      aviso,
+      { enviarEmail: (cfg, e) => enviarEmailResend(cfg, e), log },
+      assunto,
+      texto,
+    );
+  const agendador = agendarLigado
+    ? new AgendadorMinhaAgenda(chaveFirebase!)
+    : undefined;
+  const propostas = agendarLigado
+    ? new RepositorioPropostasSupabase(db)
+    : undefined;
+  // Chave Pix do sinal (secrets do Supabase). Sem elas a IA não propõe agendamento.
+  const chavePix = Deno.env.get("SALAO_PIX_CHAVE");
+  const titularPix = Deno.env.get("SALAO_PIX_TITULAR");
+  const pix =
+    chavePix && titularPix ? { chave: chavePix, titular: titularPix } : undefined;
 
   for (const s of eventos.statuses) {
     await repo.registrarStatus(s);
@@ -145,26 +164,26 @@ export async function tratar(req: Request): Promise<Response> {
       ? (ctx) =>
           montarFerramentas(ctx, {
             consulta,
-            agendador: agendarLigado
-              ? new AgendadorMinhaAgenda(chaveFirebase!)
-              : undefined,
-            propostas: agendarLigado
-              ? new RepositorioPropostasSupabase(db)
-              : undefined,
-            avisar: (assunto, texto) =>
-              enviarResumo(
-                aviso,
-                { enviarEmail: (cfg, e) => enviarEmailResend(cfg, e), log },
-                assunto,
-                texto,
-              ),
+            agendador,
+            propostas,
+            pix,
+            avisar: avisarResumo,
             log: logar,
             maxDias: 15, // o agendamento online abre até 15 dias à frente (Minha Agenda)
           })
       : undefined,
-    propostaPendente: agendarLigado
+    receberComprovante:
+      consulta && agendador && propostas
+        ? (c, m) =>
+            receberComprovante(
+              { conversaId: c.id, waId: c.waId },
+              { consulta, agendador, propostas, avisar: avisarResumo, log: logar },
+              m.tipo,
+            )
+        : undefined,
+    propostaPendente: propostas
       ? async (conversaId) => {
-          const p = await new RepositorioPropostasSupabase(db).pendente(
+          const p = await propostas.pendente(
             conversaId,
           );
           if (!p || p.expiraEm < Date.now()) return null;

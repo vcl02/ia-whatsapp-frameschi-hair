@@ -112,7 +112,7 @@ Deno.test("se o modelo ignora a última chamada sem ferramentas e insiste em con
 Deno.test("proposta pendente entra no contexto da IA (o histórico não tem as chamadas de ferramenta)", async () => {
   const { blocoContexto } = await import("../functions/_shared/llm.ts");
   const t = new Date("2026-11-07T12:00:00Z");
-  assertStringIncludes(blocoContexto(t, "Ana", "Hidratação, 2026-11-11 às 09:00 com Bruna"), "chame confirmar_agendamento agora");
+  assertStringIncludes(blocoContexto(t, "Ana", "Hidratação, 2026-11-11 às 09:00 com Bruna"), "peça o comprovante");
   assertEquals(blocoContexto(t, "Ana").includes("Proposta pendente"), false);
   const a = clienteFalso([respostaFinal("ok")]);
   await new AtendenteClaude("x", () => t, a.cliente).responder([{ autor: "cliente", texto: "SIM" }], SERVICOS_COM_ID, SALAO, { propostaPendente: "Banho de Lua, 2026-11-10 às 09:00 com Bruna" });
@@ -148,4 +148,11 @@ Deno.test("esgotou as rodadas de ferramenta: última chamada sem ferramentas e a
   // o aviso de limite vai junto dos resultados da penúltima rodada
   const ultimaMsg = (a.pedidos[8].messages as Array<{ content: Array<{ type: string; text?: string }> }>).at(-1)!;
   assertStringIncludes(ultimaMsg.content.at(-1)!.text ?? "", "Limite de consultas atingido");
+});
+
+Deno.test("prompt: a IA não agenda; quem agenda é o sistema com o comprovante do Pix", () => {
+  const s = montarSistema(SALAO, SERVICOS_TESTE);
+  assertStringIncludes(s, "sinal de 20%");
+  assertStringIncludes(s, "Quem agenda é o sistema");
+  assertEquals(s.includes("confirmar_agendamento"), false);
 });
