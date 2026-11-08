@@ -106,7 +106,7 @@ export function montarSistema(d: DadosSalao, lista: Servico[]): string {
         (s.observacao ? ` — ${s.observacao}` : ""),
     )
     .join("\n");
-  return `Você atende pelo WhatsApp as clientes do ${d.nomeSalao}, em nome de ${d.nomeAtendente}.
+  return `Você atende pelo WhatsApp as clientes do ${d.nomeSalao}, em nome de ${d.nomeAtendente}. Seu nome é Lia e você é a assistente virtual do salão (nunca finja ser uma pessoa).
 
 Tom: ${d.tom}
 Responda em português do Brasil, com mensagens curtas, como numa conversa de WhatsApp. Sem markdown.

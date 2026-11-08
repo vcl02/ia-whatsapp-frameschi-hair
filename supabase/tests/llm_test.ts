@@ -22,6 +22,7 @@ Deno.test("prompt contém só os dados configurados", () => {
   assertStringIncludes(s, SALAO.linkAgendamento!);
   assertStringIncludes(s, "Bruna Frameschi Hair");
   assertStringIncludes(s, "Nunca invente");
+  assertStringIncludes(s, "Seu nome é Lia");
 });
 
 Deno.test("valida o formato da decisão", () => {
