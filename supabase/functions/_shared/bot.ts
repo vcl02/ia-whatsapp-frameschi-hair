@@ -8,7 +8,7 @@ import {
   type DadosSalao,
   type Servico,
 } from "./salao.ts";
-import type { Atendente, ItemHistorico } from "./llm.ts";
+import type { Atendente, ConfigIA, ItemHistorico } from "./llm.ts";
 import type { ContextoConversa, Ferramentas } from "./agendamento.ts";
 
 export interface Conversa {
@@ -19,6 +19,8 @@ export interface Conversa {
 }
 
 export interface Repositorio {
+  /** Modelo, esforço e limites escolhidos no painel. */
+  config(): Promise<ConfigIA>;
   conversa(id: string): Promise<Conversa>;
   historico(conversaId: string, limite: number): Promise<ItemHistorico[]>;
   ultimaEntradaWamid(conversaId: string): Promise<string | null>;
@@ -155,25 +157,26 @@ export async function processarMensagem(
     );
   }
 
+  const cfg = await deps.repo.config();
   const agora = Date.now();
   if (
     (await deps.repo.respostasDoBot(c.id, new Date(agora - HORA_MS))) >=
-    LIMITE_POR_CONVERSA_HORA
+    cfg.limiteConversaHora
   ) {
     return passarParaHumano(
       deps,
       c,
-      `limite de ${LIMITE_POR_CONVERSA_HORA} respostas automáticas por hora nesta conversa`,
+      `limite de ${cfg.limiteConversaHora} respostas automáticas por hora nesta conversa`,
     );
   }
   if (
     (await deps.repo.respostasDoBot(null, new Date(agora - 24 * HORA_MS))) >=
-    LIMITE_GLOBAL_DIA
+    cfg.limiteGlobalDia
   ) {
     return passarParaHumano(
       deps,
       c,
-      `limite diário de ${LIMITE_GLOBAL_DIA} respostas automáticas atingido`,
+      `limite diário de ${cfg.limiteGlobalDia} respostas automáticas atingido`,
     );
   }
 
@@ -189,6 +192,8 @@ export async function processarMensagem(
         servicos,
       }),
       nomeCliente: c.nomePerfil,
+      modelo: cfg.modelo,
+      esforco: cfg.esforco,
     });
   } catch (e) {
     deps.log("erro_llm", { conversa: c.id, erro: String(e) });

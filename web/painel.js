@@ -322,7 +322,7 @@ async function carregarAgendamentos() {
 }
 
 async function carregar() {
-  await Promise.allSettled([carregarIA(), carregarNumeros(), carregarConversas(), carregarErros(), carregarAgendamentos(), carregarListas()]);
+  await Promise.allSettled([carregarIA(), carregarNumeros(), carregarConversas(), carregarErros(), carregarAgendamentos(), carregarListas(), carregarConfig()]);
 }
 
 $("btnAtualizar").onclick = async () => {
@@ -333,6 +333,48 @@ $("btnAtualizar").onclick = async () => {
   b.disabled = false;
   b.classList.remove("girando");
 };
+
+// ---------- ajustes da IA (modelo, esforço, limites) ----------
+const CONFIG = [
+  ["cfgModelo", "modelo", "texto"],
+  ["cfgEsforco", "esforco", "texto"],
+  ["cfgConvHora", "limite_conversa_hora", "inteiro", 1, 200],
+  ["cfgDia", "limite_global_dia", "inteiro", 1, 5000],
+];
+
+async function carregarConfig() {
+  const { data, error } = await sb
+    .from("salao_controle")
+    .select("modelo, esforco, limite_conversa_hora, limite_global_dia")
+    .eq("id", 1)
+    .maybeSingle();
+  if (error || !data) return falha(error);
+  for (const [id, coluna] of CONFIG) {
+    const campo = $(id);
+    if (document.activeElement !== campo) campo.value = String(data[coluna]);
+  }
+}
+
+for (const [id, coluna, tipo, min, max] of CONFIG) {
+  $(id).onchange = async () => {
+    const campo = $(id);
+    let valor = campo.value;
+    if (tipo === "inteiro") {
+      valor = Math.round(Number(valor));
+      if (!Number.isFinite(valor) || valor < min || valor > max) {
+        alert(`Use um número de ${min} a ${max}.`);
+        return carregarConfig();
+      }
+    }
+    const { error } = await sb.from("salao_controle").update({ [coluna]: valor }).eq("id", 1);
+    if (error) {
+      alert("Não consegui salvar: " + error.message);
+      return carregarConfig();
+    }
+    campo.classList.add("salvo");
+    setTimeout(() => campo.classList.remove("salvo"), 1200);
+  };
+}
 
 // ---------- informações técnicas (olhinho) ----------
 function aplicarTecnico(ver) {

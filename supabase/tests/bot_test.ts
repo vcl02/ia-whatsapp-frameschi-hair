@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert@1.0.13";
+import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1.0.13";
 import { LIMITE_GLOBAL_DIA, LIMITE_POR_CONVERSA_HORA, processarMensagem, type Conversa, type DepsBot, type Repositorio } from "../functions/_shared/bot.ts";
 import type { Atendente, DecisaoLLM, ItemHistorico } from "../functions/_shared/llm.ts";
 import type { MensagemRecebida, ResultadoEnvio } from "../functions/_shared/whatsapp.ts";
@@ -13,6 +13,8 @@ class RepoFake implements Repositorio {
   saidas: { autor: string; texto: string }[] = [];
   humano: string | null = null;
   pausarDuranteLLM = false;
+  cfg = { modelo: "claude-sonnet-5-5", esforco: "medium" as const, limiteConversaHora: LIMITE_POR_CONVERSA_HORA, limiteGlobalDia: LIMITE_GLOBAL_DIA };
+  config() { return Promise.resolve(this.cfg); }
   respostasConversaHora = 0;
   respostasGlobaisDia = 0;
   respostasDoBot(conversaId: string | null) { return Promise.resolve(conversaId ? this.respostasConversaHora : this.respostasGlobaisDia); }
@@ -143,6 +145,15 @@ Deno.test("limite por conversa: passa para humano sem chamar a LLM", async () =>
   assertEquals(await processarMensagem(t.deps, "c1", msg()), "passado_para_humano");
   assertEquals(t.llm(), 0);
   assertEquals(t.repo.c.botPausado, true);
+});
+
+Deno.test("limites vêm da configuração do painel", async () => {
+  const t = montar(ok);
+  t.repo.cfg = { ...t.repo.cfg, limiteConversaHora: 3 };
+  t.repo.respostasConversaHora = 3;
+  assertEquals(await processarMensagem(t.deps, "c1", msg()), "passado_para_humano");
+  assertEquals(t.llm(), 0);
+  assertStringIncludes(t.repo.humano ?? "", "limite de 3 respostas");
 });
 
 Deno.test("limite global diário: passa para humano sem chamar a LLM", async () => {

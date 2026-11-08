@@ -10,7 +10,14 @@ import type {
 } from "./whatsapp.ts";
 import type { Servico } from "./salao.ts";
 import type { Conversa, Repositorio } from "./bot.ts";
-import type { ItemHistorico } from "./llm.ts";
+import {
+  CONFIG_PADRAO,
+  ESFORCOS_PERMITIDOS,
+  MODELOS_PERMITIDOS,
+  type ConfigIA,
+  type Esforco,
+  type ItemHistorico,
+} from "./llm.ts";
 import type { ArmazemSessao, Sessao } from "./disponibilidade.ts";
 import type { Proposta, RepositorioPropostas } from "./agendamento.ts";
 
@@ -125,6 +132,37 @@ export class RepositorioSupabase implements Repositorio {
       throw error;
     }
     return data?.ia_ativa !== false;
+  }
+
+  /**
+   * Modelo, esforço e limites do painel. Valor desconhecido ou migration ainda
+   * não aplicada: usa o padrão (sem derrubar o atendimento).
+   */
+  async config(): Promise<ConfigIA> {
+    const { data, error } = await this.db
+      .from("salao_controle")
+      .select("modelo, esforco, limite_conversa_hora, limite_global_dia")
+      .eq("id", 1)
+      .maybeSingle();
+    if (error || !data) return CONFIG_PADRAO;
+    const r = data as {
+      modelo: string;
+      esforco: string;
+      limite_conversa_hora: number;
+      limite_global_dia: number;
+    };
+    return {
+      modelo: (MODELOS_PERMITIDOS as readonly string[]).includes(r.modelo)
+        ? r.modelo
+        : CONFIG_PADRAO.modelo,
+      esforco: (ESFORCOS_PERMITIDOS as readonly string[]).includes(r.esforco)
+        ? (r.esforco as Esforco)
+        : CONFIG_PADRAO.esforco,
+      limiteConversaHora:
+        Number(r.limite_conversa_hora) || CONFIG_PADRAO.limiteConversaHora,
+      limiteGlobalDia:
+        Number(r.limite_global_dia) || CONFIG_PADRAO.limiteGlobalDia,
+    };
   }
 
   /** Listas de teste e de familiares (tabela salao_numeros, editada no painel). */

@@ -7,6 +7,31 @@ import type { Ferramentas } from "./agendamento.ts";
 
 export const MODELO = "claude-sonnet-5-5";
 
+/** Modelos e níveis de esforço que o painel pode escolher (a tabela só aceita estes). */
+export const MODELOS_PERMITIDOS = [
+  "claude-sonnet-5-5",
+  "claude-opus-5-5",
+  "claude-haiku-5-5",
+  "claude-fable-5-1",
+] as const;
+export const ESFORCOS_PERMITIDOS = ["low", "medium", "high"] as const;
+export type Esforco = (typeof ESFORCOS_PERMITIDOS)[number];
+
+/** Ajustes da IA editados no painel (tabela salao_controle). */
+export interface ConfigIA {
+  modelo: string;
+  esforco: Esforco;
+  limiteConversaHora: number;
+  limiteGlobalDia: number;
+}
+
+export const CONFIG_PADRAO: ConfigIA = {
+  modelo: MODELO,
+  esforco: "medium",
+  limiteConversaHora: 20,
+  limiteGlobalDia: 300,
+};
+
 export type Intencao =
   | "duvida"
   | "agendar"
@@ -27,6 +52,9 @@ export interface ItemHistorico {
 }
 
 export interface OpcoesResposta {
+  /** Modelo e esforço escolhidos no painel; ausentes = padrão. */
+  modelo?: string;
+  esforco?: Esforco;
   /** Ferramentas da conversa (consultar/propor/confirmar). Ausente = sem ferramentas. */
   ferramentas?: Ferramentas;
   /** Nome no perfil do WhatsApp (usado para agendar). */
@@ -213,7 +241,7 @@ export class AtendenteClaude implements Atendente {
     salao: DadosSalao,
     opcoes: OpcoesResposta = {},
   ): Promise<DecisaoLLM> {
-    const { ferramentas, nomeCliente } = opcoes;
+    const { ferramentas, nomeCliente, modelo, esforco } = opcoes;
     const messages: Anthropic.Beta.Messages.BetaMessageParam[] =
       montarMensagens(historico);
     if (messages.length === 0)
@@ -229,12 +257,12 @@ export class AtendenteClaude implements Atendente {
     ];
     for (let rodada = 0; rodada <= MAX_RODADAS_FERRAMENTA; rodada++) {
       const resp = await this.client.beta.messages.create({
-        model: MODELO,
+        model: modelo ?? MODELO,
         max_tokens: 4096,
         betas: ["server-side-fallback-2026-07-01"],
         fallbacks: "default", // se o modelo recusar, a API tenta outro modelo
         output_config: {
-          effort: "medium",
+          effort: esforco ?? "medium",
           format: { type: "json_schema", schema: SCHEMA },
         },
         ...(ferramentas?.definicoes.length

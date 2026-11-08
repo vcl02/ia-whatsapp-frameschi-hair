@@ -110,3 +110,13 @@ Deno.test("limita o número de consultas por resposta", async () => {
 Deno.test("prompt traz a equipe", () => {
   assertStringIncludes(montarSistema(SALAO, SERVICOS_TESTE), "Equipe: Alessandra faz manicure e pedicure");
 });
+
+Deno.test("modelo e esforço escolhidos no painel vão para a API; sem escolha, o padrão", async () => {
+  const a = clienteFalso([respostaFinal("ok"), respostaFinal("ok")]);
+  const atendente = new AtendenteClaude("x", () => new Date("2026-11-07T12:00:00Z"), a.cliente);
+  const hist = [{ autor: "cliente" as const, texto: "oi" }];
+  await atendente.responder(hist, SERVICOS_COM_ID, SALAO, { modelo: "claude-opus-5-5", esforco: "high" });
+  await atendente.responder(hist, SERVICOS_COM_ID, SALAO);
+  assertEquals([a.pedidos[0].model, (a.pedidos[0].output_config as { effort: string }).effort], ["claude-opus-5-5", "high"]);
+  assertEquals([a.pedidos[1].model, (a.pedidos[1].output_config as { effort: string }).effort], ["claude-sonnet-5-5", "medium"]);
+});
