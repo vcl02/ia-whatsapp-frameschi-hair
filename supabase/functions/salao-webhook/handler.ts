@@ -35,6 +35,7 @@ import {
 } from "../_shared/aviso.ts";
 import { AtendenteClaude } from "../_shared/llm.ts";
 import { SALAO } from "../_shared/salao.ts";
+import { EVENTO_DE_ERRO, registrarEvento } from "../_shared/eventos.ts";
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 
@@ -43,16 +44,13 @@ function log(evento: string, dados: Record<string, unknown> = {}) {
   console.log(JSON.stringify({ evento, ...dados }));
 }
 
-// Eventos de erro vão também para o painel (tabela salao_eventos), sem texto de mensagem.
-const EVENTO_DE_ERRO = /^(erro_|status_falha)/;
-
 function emSegundoPlano(p: Promise<unknown>) {
   const seguro = p.catch((e) => log("erro_segundo_plano", { erro: String(e) }));
   if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(seguro);
   return seguro;
 }
 
-export async function tratar(req: Request): Promise<Response> {
+async function tratarInterno(req: Request): Promise<Response> {
   const url = new URL(req.url);
 
   if (req.method === "GET") {
@@ -233,4 +231,19 @@ export async function tratar(req: Request): Promise<Response> {
     fora_da_lista: descartados,
   });
   return new Response("ok", { status: 200 });
+}
+
+/** Quebra geral (falta de secret, banco fora do ar etc.): registra no painel e deixa o erro subir (a Meta reenvia). */
+export async function tratar(req: Request): Promise<Response> {
+  try {
+    return await tratarInterno(req);
+  } catch (e) {
+    log("erro_funcao_webhook", { erro: String(e) });
+    try {
+      await registrarEvento(clienteServico(), "erro_funcao_webhook", {
+        erro: String(e),
+      });
+    } catch { /* sem banco ou sem env: o log acima já registrou */ }
+    throw e;
+  }
 }
