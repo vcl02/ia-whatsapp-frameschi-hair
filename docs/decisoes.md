@@ -203,3 +203,13 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
 - Risco aceito: a remarcação não pede comprovante (o sinal já foi pago), então quem tem um
   agendamento ativo pode ocupar um segundo horário por algumas horas até a Bruna cancelar
   o antigo; limitado a uma remarcação por agendamento.
+
+## Erros e alertas (sem Sentry/Grafana) — 2026-11-09
+- Decisão: para um salão com um número, o painel + e-mails bastam; Sentry e Grafana não entram
+  (mais um serviço com dados de cliente, LGPD, custo).
+- Erros do webhook, dos lembretes e quebras gerais das duas funções vão para `salao_eventos`
+  (tipos `erro_*` e `status_falha`), que o painel já lista. Sem texto de mensagem.
+- A função `salao-lembrete` (roda a cada minuto) manda um e-mail-resumo com a contagem por tipo
+  quando há erro novo, no máximo 1 por hora (marca `ultimo_alerta_erros` em `salao_info`).
+  Na primeira vez olha só a última hora. Sem e-mail configurado, só registra no log.
+- Quebra geral do webhook continua devolvendo erro (500): a Meta reenvia a mensagem.

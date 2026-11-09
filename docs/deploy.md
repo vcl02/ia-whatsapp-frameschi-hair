@@ -43,9 +43,9 @@ visão e funções `salao_*`.
 
 ## Arquivos de cada função (deploy pelo MCP, tudo inline)
 - `salao-webhook`: index, handler e, em `_shared`: assinatura, whatsapp, deps, db, llm,
-  disponibilidade, agendamento, bot, salao, aviso, lembrete.
+  disponibilidade, agendamento, bot, salao, aviso, lembrete, eventos.
 - `salao-lembrete`: index, handler e, em `_shared`: deps, whatsapp, db, salao, bot, llm,
-  disponibilidade, agendamento, lembrete.
+  disponibilidade, agendamento, lembrete, eventos, alertas, aviso.
 - `salao-sincronizar`: index, handler e, em `_shared`: deps, db, llm, aviso, minhaagenda,
   agendamento, disponibilidade, salao, bot, whatsapp, lembrete (o `db.ts` importa
   `agendamento.ts`, que importa `disponibilidade.ts`).
