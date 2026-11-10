@@ -1,7 +1,22 @@
 {
   "tasks": {
     "test": "deno test --allow-env --allow-read supabase/tests",
-    "check": "deno check supabase/functions/salao-webhook/index.ts supabase/functions/salao-responder/index.ts supabase/functions/salao-webhook/handler.ts supabase/functions/salao-responder/handler.ts supabase/functions/salao-sincronizar/index.ts"
+    "check": "deno check supabase/functions/salao-webhook/index.ts supabase/functions/salao-responder/index.ts supabase/functions/salao-webhook/handler.ts supabase/functions/salao-responder/handler.ts supabase/functions/salao-sincronizar/index.ts",
+    "lint": "deno lint",
+    "format": "deno fmt",
+    "format:check": "deno fmt --check",
+    "validar": "deno task lint && deno task format:check && deno task check && deno task test"
+  },
+  "fmt": {
+    "semiColons": true,
+    "singleQuote": true,
+    "indentWidth": 2,
+    "lineWidth": 90,
+    "exclude": ["site", "web/config.publico.js"]
+  },
+  "lint": {
+    "rules": { "tags": ["recommended"], "exclude": ["require-await"] },
+    "exclude": ["site"]
   },
   "lock": false
 }

@@ -1,0 +1,6 @@
+# Força LF em todo texto, consistente com end_of_line=lf do .editorconfig e com o deno fmt.
+# Sem isto, o core.autocrlf do Git no Windows grava CRLF no checkout.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
