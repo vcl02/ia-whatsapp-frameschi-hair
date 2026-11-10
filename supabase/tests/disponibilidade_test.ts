@@ -7,6 +7,8 @@ import {
   type ArmazemSessao,
   ConsultaMinhaAgenda,
   FalhaConsulta,
+  formatoProfissionaisOk,
+  formatoVagasOk,
   hojeSaoPaulo,
   IDENTIDADE,
   lerProfissionais,
@@ -177,4 +179,41 @@ Deno.test('primeiro nome da profissional', async () => {
   const { primeiroNome } = await import('../functions/_shared/disponibilidade.ts');
   assertEquals(primeiroNome('Bruna Stefani frameschi '), 'Bruna');
   assertEquals(primeiroNome('alessandra'), 'Alessandra');
+});
+
+Deno.test('formato novo do Minha Agenda é avisado, formato normal e listas vazias não', async () => {
+  assertEquals(formatoProfissionaisOk(PROFISSIONAIS), true);
+  assertEquals(formatoProfissionaisOk([]), true); // ninguém atende: normal
+  assertEquals(formatoProfissionaisOk({ employees: [] }), false);
+  assertEquals(formatoProfissionaisOk([{ outraChave: [] }]), false);
+  assertEquals(formatoVagasOk(VAGAS), true);
+  assertEquals(
+    formatoVagasOk({ listAppointmentAvailabilityDTO: [], holiday: false }),
+    true,
+  );
+  assertEquals(formatoVagasOk({ holiday: true }), true);
+  assertEquals(formatoVagasOk({ slots: [] }), false);
+  assertEquals(formatoVagasOk(null), false);
+
+  const avisos: string[] = [];
+  const mudou = (async (url: string) => {
+    const u = String(url);
+    const resp = (c: unknown) => new Response(JSON.stringify(c), { status: 200 });
+    if (u.includes('accounts:signUp')) {
+      return resp({ idToken: 't', refreshToken: 'r', expiresIn: '3600' });
+    }
+    if (u.includes('firebaseGuestSignUp')) return resp({});
+    if (u.includes('availableEmployeesByService')) return resp(PROFISSIONAIS);
+    return resp({ slots: [] }); // availableTimes com o formato trocado
+  }) as typeof fetch;
+  const c = new ConsultaMinhaAgenda(
+    'KEY',
+    new ArmazemMemoria(),
+    mudou,
+    () => 1_000_000,
+    (onde) => avisos.push(onde),
+  );
+  const agenda = await c.vagas(5732343, '2026-11-10');
+  assertEquals(agenda.profissionais.every((p) => p.horarios.length === 0), true);
+  assertEquals(avisos.length > 0 && avisos.every((a) => a === 'availableTimes'), true);
 });

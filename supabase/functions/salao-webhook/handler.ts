@@ -114,7 +114,15 @@ async function tratarInterno(req: Request): Promise<Response> {
   // O agendamento pode ser desligado à parte com SALAO_AGENDAR=nao.
   const chaveFirebase = Deno.env.get('SALAO_MA_FIREBASE_KEY');
   const consulta = chaveFirebase
-    ? new ConsultaMinhaAgenda(chaveFirebase, new ArmazemSessaoSupabase(db))
+    ? new ConsultaMinhaAgenda(
+      chaveFirebase,
+      new ArmazemSessaoSupabase(db),
+      fetch,
+      () => Date.now(),
+      // O Minha Agenda respondeu 200, mas num formato novo: sem isto o bot diria
+      // "sem horários" sem ninguém saber.
+      (onde) => logar('erro_formato_minhaagenda', { onde }),
+    )
     : null;
   const agendarLigado = !!chaveFirebase && Deno.env.get('SALAO_AGENDAR') !== 'nao';
   const aviso = lerConfigAviso((n) => Deno.env.get(n));

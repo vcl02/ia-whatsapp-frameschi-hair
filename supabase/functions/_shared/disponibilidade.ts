@@ -52,6 +52,25 @@ const cabecalhosApi = (token?: string): Record<string, string> => ({
 
 // ---------- leitura das respostas (puras, testadas) ----------
 
+/**
+ * A resposta de `availableEmployeesByService` tem o formato esperado? Lista vazia é válida
+ * (ninguém atende); o que acusa mudança no Minha Agenda é não ser lista, ou um item sem
+ * `listEmployeeInfo`.
+ */
+export function formatoProfissionaisOk(json: unknown): boolean {
+  return Array.isArray(json) &&
+    json.every((b) => Array.isArray(obj(b).listEmployeeInfo));
+}
+
+/**
+ * A resposta de `availableTimes` tem o formato esperado? Precisa trazer a lista de
+ * horários (pode estar vazia) ou o aviso de feriado.
+ */
+export function formatoVagasOk(json: unknown): boolean {
+  const raiz = obj(json);
+  return Array.isArray(raiz.listAppointmentAvailabilityDTO) || raiz.holiday === true;
+}
+
 export function lerProfissionais(json: unknown): Profissional[] {
   const out: Profissional[] = [];
   for (const bloco of arr(json)) {
@@ -186,6 +205,8 @@ export class ConsultaMinhaAgenda {
     private armazem: ArmazemSessao,
     private fetchFn: typeof fetch = fetch,
     private agora: () => number = () => Date.now(),
+    /** Chamado quando a resposta do Minha Agenda não tem o formato esperado (o site mudou?). */
+    private formatoInesperado: (onde: string) => void = () => {},
   ) {}
 
   private loginAnonimo(): Promise<Sessao> {
@@ -260,18 +281,20 @@ export class ConsultaMinhaAgenda {
     const c = this.cache.get(chave);
     if (!semCache && c && this.agora() - c.em < 5 * 60_000) return c.valor;
 
-    const profissionais = lerProfissionais(
-      await this.getApi(
-        `availableEmployeesByService?serviceIds=${servicoId}&date=${data}`,
-      ),
+    const brutoProfissionais = await this.getApi(
+      `availableEmployeesByService?serviceIds=${servicoId}&date=${data}`,
     );
+    if (!formatoProfissionaisOk(brutoProfissionais)) {
+      this.formatoInesperado('availableEmployeesByService');
+    }
+    const profissionais = lerProfissionais(brutoProfissionais);
     const agenda: Agenda = { data, feriado: false, profissionais: [] };
     for (const p of profissionais) {
-      const { vagas, feriado } = lerVagas(
-        await this.getApi(
-          `availableTimes?serviceIds=${servicoId}&employeeId=${p.id}&date=${data}`,
-        ),
+      const brutoVagas = await this.getApi(
+        `availableTimes?serviceIds=${servicoId}&employeeId=${p.id}&date=${data}`,
       );
+      if (!formatoVagasOk(brutoVagas)) this.formatoInesperado('availableTimes');
+      const { vagas, feriado } = lerVagas(brutoVagas);
       if (feriado) {
         agenda.feriado = true;
         agenda.profissionais = [];
