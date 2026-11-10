@@ -38,9 +38,9 @@ export interface EventosWebhook {
 }
 
 type Obj = Record<string, unknown>;
-const obj = (v: unknown): Obj => (v && typeof v === "object" ? (v as Obj) : {});
+const obj = (v: unknown): Obj => (v && typeof v === 'object' ? (v as Obj) : {});
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
-const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
+const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 
 function dataUnix(v: unknown): Date | null {
   const n = Number(v);
@@ -49,11 +49,11 @@ function dataUnix(v: unknown): Date | null {
 
 function textoDaMensagem(m: Obj): string | null {
   switch (m.type) {
-    case "text":
+    case 'text':
       return str(obj(m.text).body);
-    case "button":
+    case 'button':
       return str(obj(m.button).text);
-    case "interactive": {
+    case 'interactive': {
       const i = obj(m.interactive);
       return str(obj(i.button_reply).title) ?? str(obj(i.list_reply).title);
     }
@@ -83,7 +83,7 @@ export function lerEventos(
       }
       // Coexistência: o formato abaixo segue a documentação da Meta como a
       // conheço, mas NÃO foi conferido com um evento real.
-      if (c.field === "smb_message_echoes") {
+      if (c.field === 'smb_message_echoes') {
         for (const eco of arr(value.message_echoes)) {
           const e = obj(eco);
           const wamid = str(e.id);
@@ -92,14 +92,14 @@ export function lerEventos(
           out.ecos.push({
             wamid,
             para,
-            tipo: str(e.type) ?? "desconhecido",
+            tipo: str(e.type) ?? 'desconhecido',
             texto: textoDaMensagem(e),
             enviadaEm: dataUnix(e.timestamp) ?? new Date(),
           });
         }
         continue;
       }
-      if (c.field !== "messages") {
+      if (c.field !== 'messages') {
         out.ignorados++;
         continue;
       }
@@ -117,7 +117,7 @@ export function lerEventos(
         if (!wamid || !waId) continue;
         // Reação (emoji em cima de uma mensagem) não é conversa: não grava, não responde
         // e não chama ninguém. Emoji digitado como texto segue como mensagem normal.
-        if (m.type === "reaction") {
+        if (m.type === 'reaction') {
           out.ignorados++;
           continue;
         }
@@ -125,7 +125,7 @@ export function lerEventos(
           wamid,
           waId,
           nomePerfil: nomes.get(waId) ?? null,
-          tipo: str(m.type) ?? "desconhecido",
+          tipo: str(m.type) ?? 'desconhecido',
           texto: textoDaMensagem(m),
           recebidaEm: dataUnix(m.timestamp) ?? new Date(),
         });
@@ -168,16 +168,17 @@ async function postar(
   corpoMsg: Record<string, unknown>,
   fetchFn: typeof fetch,
 ): Promise<ResultadoEnvio> {
-  const url = `https://graph.facebook.com/${cfg.graphApiVersion}/${cfg.phoneNumberId}/messages`;
+  const url =
+    `https://graph.facebook.com/${cfg.graphApiVersion}/${cfg.phoneNumberId}/messages`;
   const resp = await fetchFn(url, {
-    method: "POST",
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${cfg.token}`,
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
       ...corpoMsg,
     }),
   });
@@ -200,7 +201,7 @@ export function enviarTexto(
 ): Promise<ResultadoEnvio> {
   return postar(
     cfg,
-    { to: para, type: "text", text: { preview_url: false, body: texto } },
+    { to: para, type: 'text', text: { preview_url: false, body: texto } },
     fetchFn,
   );
 }
@@ -218,17 +219,17 @@ export function enviarModelo(
     cfg,
     {
       to: para,
-      type: "template",
+      type: 'template',
       template: {
         name: nome,
         language: { code: idioma },
         components: parametros.length
           ? [
-              {
-                type: "body",
-                parameters: parametros.map((t) => ({ type: "text", text: t })),
-              },
-            ]
+            {
+              type: 'body',
+              parameters: parametros.map((t) => ({ type: 'text', text: t })),
+            },
+          ]
           : [],
       },
     },
@@ -249,7 +250,7 @@ export interface ListasNumeros {
 
 /** Só dígitos, com 55 na frente quando vier sem código do país (DDD + número). */
 export function normalizarNumero(valor: string): string {
-  const d = valor.replace(/\D/g, "");
+  const d = valor.replace(/\D/g, '');
   return d.length === 10 || d.length === 11 ? `55${d}` : d;
 }
 
@@ -266,15 +267,14 @@ export function filtrarPorListas(
   ev: EventosWebhook,
   listas: ListasNumeros,
 ): { eventos: EventosWebhook; descartados: number } {
-  const ok = (n: string | null) => atendeNumero(listas, n ?? "");
+  const ok = (n: string | null) => atendeNumero(listas, n ?? '');
   const eventos: EventosWebhook = {
     mensagens: ev.mensagens.filter((m) => ok(m.waId)),
     statuses: ev.statuses.filter((s) => ok(s.recipientId)),
     ecos: ev.ecos.filter((e) => ok(e.para)),
     ignorados: ev.ignorados,
   };
-  const descartados =
-    ev.mensagens.length +
+  const descartados = ev.mensagens.length +
     ev.statuses.length +
     ev.ecos.length -
     (eventos.mensagens.length + eventos.statuses.length + eventos.ecos.length);

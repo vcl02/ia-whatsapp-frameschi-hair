@@ -8,17 +8,17 @@ async function hmacHex(
   corpo: Uint8Array<ArrayBuffer>,
 ): Promise<string> {
   const chave = await crypto.subtle.importKey(
-    "raw",
+    'raw',
     encoder.encode(segredo),
-    { name: "HMAC", hash: "SHA-256" },
+    { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ["sign"],
+    ['sign'],
   );
   const assinatura = new Uint8Array(
-    await crypto.subtle.sign("HMAC", chave, corpo),
+    await crypto.subtle.sign('HMAC', chave, corpo),
   );
-  return Array.from(assinatura, (b) => b.toString(16).padStart(2, "0")).join(
-    "",
+  return Array.from(assinatura, (b) => b.toString(16).padStart(2, '0')).join(
+    '',
   );
 }
 
@@ -35,8 +35,8 @@ export async function assinaturaValida(
   appSecret: string,
 ): Promise<boolean> {
   if (!cabecalho || !appSecret) return false;
-  const [algoritmo, recebida] = cabecalho.split("=", 2);
-  if (algoritmo !== "sha256" || !recebida) return false;
+  const [algoritmo, recebida] = cabecalho.split('=', 2);
+  if (algoritmo !== 'sha256' || !recebida) return false;
   const esperada = await hmacHex(appSecret, corpo);
   return iguaisTempoConstante(esperada, recebida.toLowerCase());
 }

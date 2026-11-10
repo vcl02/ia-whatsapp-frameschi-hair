@@ -4,7 +4,7 @@
 // regras de agendamento). O bot só espelha.
 
 export const URL_PERFIL =
-  "https://apionline.maapp.com.br/companyProfiles/Brunaframeschihair";
+  'https://apionline.maapp.com.br/companyProfiles/Brunaframeschihair';
 
 // ---------- formato da API (só o que usamos) ----------
 
@@ -18,7 +18,7 @@ export interface ServicoApi {
 }
 
 type Obj = Record<string, unknown>;
-const obj = (v: unknown): Obj => (v && typeof v === "object" ? (v as Obj) : {});
+const obj = (v: unknown): Obj => (v && typeof v === 'object' ? (v as Obj) : {});
 
 // ---------- formatação ----------
 
@@ -26,13 +26,13 @@ export function formatarPreco(
   valor: number | null,
   aPartirDe: boolean,
 ): string {
-  if (valor == null || !Number.isFinite(valor)) return "consultar";
-  const brl = new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
+  if (valor == null || !Number.isFinite(valor)) return 'consultar';
+  const brl = new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
   })
     .format(valor)
-    .replace(/ /g, " ");
+    .replace(/ /g, ' ');
   return aPartirDe ? `a partir de ${brl}` : brl;
 }
 
@@ -45,34 +45,36 @@ export function formatarDuracao(minutos: number | null): string | null {
 }
 
 function hora(hhmm: string): string {
-  const [h, m] = hhmm.split(":").map(Number);
-  return m ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`;
+  const [h, m] = hhmm.split(':').map(Number);
+  return m ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`;
 }
 
 const DIAS: Array<[string, string]> = [
-  ["mon", "segunda"],
-  ["tue", "terça"],
-  ["wed", "quarta"],
-  ["thu", "quinta"],
-  ["fri", "sexta"],
-  ["sat", "sábado"],
-  ["sun", "domingo"],
+  ['mon', 'segunda'],
+  ['tue', 'terça'],
+  ['wed', 'quarta'],
+  ['thu', 'quinta'],
+  ['fri', 'sexta'],
+  ['sat', 'sábado'],
+  ['sun', 'domingo'],
 ];
 
 /** Ex.: "terça a sábado, das 8h às 12h e das 13h às 19h. Fechado: segunda e domingo." */
 export function horarioDeTrabalho(ws: unknown): string | null {
   const w = obj(ws);
   const porDia = DIAS.map(([k, nome]) => {
-    if (w[`${k}Enabled`] !== true)
+    if (w[`${k}Enabled`] !== true) {
       return { nome, texto: null as string | null };
+    }
     const faixas: string[] = [];
     for (const i of [1, 2, 3]) {
       const ini = w[`${k}StartTime${i}`],
         fim = w[`${k}EndTime${i}`];
-      if (typeof ini === "string" && typeof fim === "string")
+      if (typeof ini === 'string' && typeof fim === 'string') {
         faixas.push(`das ${hora(ini)} às ${hora(fim)}`);
+      }
     }
-    return { nome, texto: faixas.length ? faixas.join(" e ") : null };
+    return { nome, texto: faixas.length ? faixas.join(' e ') : null };
   });
   if (!porDia.some((d) => d.texto)) return null;
 
@@ -94,12 +96,14 @@ export function horarioDeTrabalho(ws: unknown): string | null {
   const abertos = grupos
     .map(
       (g) =>
-        `${g.dias.length > 1 ? `${g.dias[0]} a ${g.dias[g.dias.length - 1]}` : g.dias[0]}, ${g.texto}`,
+        `${
+          g.dias.length > 1 ? `${g.dias[0]} a ${g.dias[g.dias.length - 1]}` : g.dias[0]
+        }, ${g.texto}`,
     )
-    .join("; ");
+    .join('; ');
   const fechados = porDia.filter((d) => !d.texto).map((d) => d.nome);
   return fechados.length
-    ? `${abertos}. Fechado: ${fechados.join(" e ").replace(/ e (?=.* e )/g, ", ")}.`
+    ? `${abertos}. Fechado: ${fechados.join(' e ').replace(/ e (?=.* e )/g, ', ')}.`
     : `${abertos}.`;
 }
 
@@ -107,34 +111,37 @@ export function horarioDeTrabalho(ws: unknown): string | null {
 export function regrasDeAgendamento(info: unknown): string | null {
   const c = obj(info);
   const partes: string[] = [];
-  const min =
-    typeof c.minAmountOfMinutesBeforeSchedule === "number"
-      ? c.minAmountOfMinutesBeforeSchedule
-      : null;
-  const max =
-    typeof c.maxAmountOfDaysAfterSchedule === "number"
-      ? c.maxAmountOfDaysAfterSchedule
-      : null;
-  if (min)
+  const min = typeof c.minAmountOfMinutesBeforeSchedule === 'number'
+    ? c.minAmountOfMinutesBeforeSchedule
+    : null;
+  const max = typeof c.maxAmountOfDaysAfterSchedule === 'number'
+    ? c.maxAmountOfDaysAfterSchedule
+    : null;
+  if (min) {
     partes.push(
-      `O agendamento online precisa ser feito com pelo menos ${formatarDuracao(min)} de antecedência.`,
+      `O agendamento online precisa ser feito com pelo menos ${
+        formatarDuracao(min)
+      } de antecedência.`,
     );
+  }
   if (max) partes.push(`Dá para agendar online até ${max} dias à frente.`);
   if (
-    typeof c.cancelingPolicyText === "string" &&
+    typeof c.cancelingPolicyText === 'string' &&
     c.cancelingPolicyText.trim()
   ) {
     partes.push(`Política de cancelamento: ${c.cancelingPolicyText.trim()}`);
   }
   if (
-    typeof c.appointmentWarningMessage === "string" &&
+    typeof c.appointmentWarningMessage === 'string' &&
     c.appointmentWarningMessage.trim()
   ) {
     partes.push(
-      `Aviso do salão para agendamentos: ${c.appointmentWarningMessage.trim().replace(/\s*\n+\s*/g, " ")}`,
+      `Aviso do salão para agendamentos: ${
+        c.appointmentWarningMessage.trim().replace(/\s*\n+\s*/g, ' ')
+      }`,
     );
   }
-  return partes.length ? partes.join("\n") : null;
+  return partes.length ? partes.join('\n') : null;
 }
 
 // ---------- leitura do JSON ----------
@@ -161,25 +168,24 @@ export function lerPerfil(json: unknown): PerfilLido {
   const servicos: ServicoEspelho[] = [];
   for (const item of lista) {
     const s = obj(item);
-    const id = typeof s.id === "number" ? s.id : null;
-    const nome = typeof s.name === "string" ? s.name.trim() : "";
+    const id = typeof s.id === 'number' ? s.id : null;
+    const nome = typeof s.name === 'string' ? s.name.trim() : '';
     if (!id || !nome) continue;
     // Espelho fiel: "a partir de" só quando o próprio Minha Agenda marca assim.
-    const aPartirDe = s.onlineSchedulingPriceDisplay === "STARTS_AT";
+    const aPartirDe = s.onlineSchedulingPriceDisplay === 'STARTS_AT';
     servicos.push({
       origem_id: id,
       nome,
       preco: formatarPreco(
-        typeof s.price === "number" ? s.price : null,
+        typeof s.price === 'number' ? s.price : null,
         aPartirDe,
       ),
       duracao: formatarDuracao(
-        typeof s.duration === "number" ? s.duration : null,
+        typeof s.duration === 'number' ? s.duration : null,
       ),
-      categoria:
-        typeof obj(s.serviceCategory).name === "string"
-          ? (obj(s.serviceCategory).name as string)
-          : null,
+      categoria: typeof obj(s.serviceCategory).name === 'string'
+        ? (obj(s.serviceCategory).name as string)
+        : null,
       a_partir_de: aPartirDe,
       ordem: servicos.length + 1,
     });
@@ -223,8 +229,9 @@ export function planejar(banco: ServicoBanco[], site: ServicoEspelho[]): Plano {
   const jaEspelhados = banco.filter(
     (b) => b.origem_id != null && b.ativo,
   ).length;
-  if (site.length === 0)
-    throw new LeituraSuspeita("o Minha Agenda não devolveu nenhum serviço");
+  if (site.length === 0) {
+    throw new LeituraSuspeita('o Minha Agenda não devolveu nenhum serviço');
+  }
   if (jaEspelhados > 0 && site.length < jaEspelhados / 2) {
     throw new LeituraSuspeita(
       `o Minha Agenda devolveu ${site.length} serviços, eram ${jaEspelhados}`,
@@ -247,18 +254,20 @@ export function planejar(banco: ServicoBanco[], site: ServicoEspelho[]): Plano {
     if (!atual) {
       plano.inserir.push(s);
       plano.mudancas.push(
-        `Novo: ${s.nome} (${s.preco}${s.duracao ? `, ${s.duracao}` : ""})`,
+        `Novo: ${s.nome} (${s.preco}${s.duracao ? `, ${s.duracao}` : ''})`,
       );
       continue;
     }
     const diffs: string[] = [];
     if (atual.nome !== s.nome) diffs.push(`nome "${atual.nome}" → "${s.nome}"`);
-    if (atual.preco !== s.preco)
+    if (atual.preco !== s.preco) {
       diffs.push(`preço ${atual.preco} → ${s.preco}`);
-    if (atual.duracao !== s.duracao)
-      diffs.push(`duração ${atual.duracao ?? "-"} → ${s.duracao ?? "-"}`);
-    if (!atual.ativo) diffs.push("voltou para o Minha Agenda");
-    if (diffs.length) plano.mudancas.push(`${s.nome}: ${diffs.join("; ")}`);
+    }
+    if (atual.duracao !== s.duracao) {
+      diffs.push(`duração ${atual.duracao ?? '-'} → ${s.duracao ?? '-'}`);
+    }
+    if (!atual.ativo) diffs.push('voltou para o Minha Agenda');
+    if (diffs.length) plano.mudancas.push(`${s.nome}: ${diffs.join('; ')}`);
     if (
       diffs.length ||
       atual.categoria !== s.categoria ||

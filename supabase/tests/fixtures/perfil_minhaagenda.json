@@ -8,19 +8,74 @@
   },
   "workSchedule": {
     "monEnabled": false,
-    "tueStartTime1": "08:00", "tueEndTime1": "12:00", "tueStartTime2": "13:00", "tueEndTime2": "19:00", "tueEnabled": true,
-    "wedStartTime1": "08:00", "wedEndTime1": "12:00", "wedStartTime2": "13:00", "wedEndTime2": "19:00", "wedEnabled": true,
-    "thuStartTime1": "08:00", "thuEndTime1": "12:00", "thuStartTime2": "13:00", "thuEndTime2": "19:00", "thuEnabled": true,
-    "friStartTime1": "08:00", "friEndTime1": "12:00", "friStartTime2": "13:00", "friEndTime2": "19:00", "friEnabled": true,
-    "satStartTime1": "08:00", "satEndTime1": "12:00", "satStartTime2": "13:00", "satEndTime2": "19:00", "satEnabled": true,
+    "tueStartTime1": "08:00",
+    "tueEndTime1": "12:00",
+    "tueStartTime2": "13:00",
+    "tueEndTime2": "19:00",
+    "tueEnabled": true,
+    "wedStartTime1": "08:00",
+    "wedEndTime1": "12:00",
+    "wedStartTime2": "13:00",
+    "wedEndTime2": "19:00",
+    "wedEnabled": true,
+    "thuStartTime1": "08:00",
+    "thuEndTime1": "12:00",
+    "thuStartTime2": "13:00",
+    "thuEndTime2": "19:00",
+    "thuEnabled": true,
+    "friStartTime1": "08:00",
+    "friEndTime1": "12:00",
+    "friStartTime2": "13:00",
+    "friEndTime2": "19:00",
+    "friEnabled": true,
+    "satStartTime1": "08:00",
+    "satEndTime1": "12:00",
+    "satStartTime2": "13:00",
+    "satEndTime2": "19:00",
+    "satEnabled": true,
     "sunEnabled": false
   },
   "services": [
-    { "id": 5732343, "name": "Banho de Lua", "price": 30.00, "duration": 30, "serviceCategory": null, "onlineSchedulingPriceDisplay": "FIXED" },
-    { "id": 2409365, "name": "Botox (A partir de)", "price": 150.00, "duration": 180, "serviceCategory": null, "onlineSchedulingPriceDisplay": "STARTS_AT" },
-    { "id": 4954381, "name": "Drenagem Linfática", "price": 79.90, "duration": 60, "serviceCategory": null, "onlineSchedulingPriceDisplay": "FIXED" },
-    { "id": 6789990, "name": "Limpeza do Couro Cabeludo + Hidratação + Escova", "price": 105.00, "duration": 65, "serviceCategory": null, "onlineSchedulingPriceDisplay": "FIXED" },
-    { "id": 3259817, "name": "Luzes (A partir de)", "price": 350.00, "duration": 300, "serviceCategory": { "id": 1, "name": "Tintura", "deleted": false }, "onlineSchedulingPriceDisplay": "FIXED" }
+    {
+      "id": 5732343,
+      "name": "Banho de Lua",
+      "price": 30.00,
+      "duration": 30,
+      "serviceCategory": null,
+      "onlineSchedulingPriceDisplay": "FIXED"
+    },
+    {
+      "id": 2409365,
+      "name": "Botox (A partir de)",
+      "price": 150.00,
+      "duration": 180,
+      "serviceCategory": null,
+      "onlineSchedulingPriceDisplay": "STARTS_AT"
+    },
+    {
+      "id": 4954381,
+      "name": "Drenagem Linfática",
+      "price": 79.90,
+      "duration": 60,
+      "serviceCategory": null,
+      "onlineSchedulingPriceDisplay": "FIXED"
+    },
+    {
+      "id": 6789990,
+      "name": "Limpeza do Couro Cabeludo + Hidratação + Escova",
+      "price": 105.00,
+      "duration": 65,
+      "serviceCategory": null,
+      "onlineSchedulingPriceDisplay": "FIXED"
+    },
+    {
+      "id": 3259817,
+      "name": "Luzes (A partir de)",
+      "price": 350.00,
+      "duration": 300,
+      "serviceCategory": { "id": 1, "name": "Tintura", "deleted": false },
+      "onlineSchedulingPriceDisplay": "FIXED"
+    }
   ],
   "notAvailable": false
 }

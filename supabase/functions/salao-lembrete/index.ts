@@ -1,3 +1,3 @@
-import { tratar } from "./handler.ts";
+import { tratar } from './handler.ts';
 
 Deno.serve(tratar);

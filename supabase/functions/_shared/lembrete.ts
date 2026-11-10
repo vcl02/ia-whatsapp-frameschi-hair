@@ -3,8 +3,8 @@
 // A proposta vale 30 min: lembretes aos 7, 14, 21 e 28 minutos, no máximo 4. Quando a
 // reserva vence sem comprovante, um último aviso diz que o horário não foi agendado.
 
-import { dataCurta, sinalDoServico } from "./agendamento.ts";
-import type { ResultadoEnvio } from "./whatsapp.ts";
+import { dataCurta, sinalDoServico } from './agendamento.ts';
+import type { ResultadoEnvio } from './whatsapp.ts';
 
 export const INTERVALO_LEMBRETE_MS = 7 * 60_000;
 export const MAX_LEMBRETES = 4;
@@ -50,15 +50,17 @@ export function expiracaoDevida(p: PropostaParaLembrete, agora: number): boolean
 }
 
 export function textoExpiracao(p: PropostaParaLembrete): string {
-  const servico = p.servicoNome.replace(/\s*\(a partir de\)/i, "");
-  return `${p.nomeCliente}, o tempo da reserva do horário (${servico}, ${dataCurta(p.data)}, às ${p.hora}) acabou e, como não recebi o comprovante do Pix, ele não foi agendado. 💖 Se ainda quiser, é só me avisar que eu vejo os horários de novo.`;
+  const servico = p.servicoNome.replace(/\s*\(a partir de\)/i, '');
+  return `${p.nomeCliente}, o tempo da reserva do horário (${servico}, ${
+    dataCurta(p.data)
+  }, às ${p.hora}) acabou e, como não recebi o comprovante do Pix, ele não foi agendado. 💖 Se ainda quiser, é só me avisar que eu vejo os horários de novo.`;
 }
 
 export function textoLembrete(p: PropostaParaLembrete, agora: number): string {
   const minutos = Math.max(1, Math.ceil((p.expiraEm - agora) / 60_000));
-  const servico = p.servicoNome.replace(/\s*\(a partir de\)/i, "");
+  const servico = p.servicoNome.replace(/\s*\(a partir de\)/i, '');
   const horario = `${servico}, ${dataCurta(p.data)}, às ${p.hora}`;
-  const sinal = sinalDoServico(p.preco, p.servicoNome)?.texto ?? "o sinal de 20%";
+  const sinal = sinalDoServico(p.preco, p.servicoNome)?.texto ?? 'o sinal de 20%';
   const nome = p.nomeCliente;
   const textos = [
     `Oi, ${nome}! 💖 Passando só pra lembrar: seu horário (${horario}) só fica agendado depois que eu receber o comprovante do Pix de ${sinal}, em imagem ou PDF. Ele continua reservado pra você por mais ${minutos} minutos.`,
@@ -93,14 +95,14 @@ export async function enviarLembretes(deps: DepsLembretes): Promise<number> {
       const texto = expirou ? textoExpiracao(p) : textoLembrete(p, agora);
       const envio = await deps.enviar(p.waId, texto);
       await deps.registrarSaida(p.conversaId, texto, envio);
-      deps.log(expirou ? "reserva_expirada_aviso" : "lembrete_comprovante", {
+      deps.log(expirou ? 'reserva_expirada_aviso' : 'lembrete_comprovante', {
         conversa: p.conversaId,
         numero: p.lembretes + 1,
         envio_ok: envio.ok,
       });
       if (envio.ok) enviados++;
     } catch (e) {
-      deps.log("erro_lembrete", { conversa: p.conversaId, erro: String(e) });
+      deps.log('erro_lembrete', { conversa: p.conversaId, erro: String(e) });
     }
   }
   return enviados;

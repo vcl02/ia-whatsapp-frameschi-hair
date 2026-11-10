@@ -6,7 +6,7 @@ name: Publicar site
 on:
   push:
     branches: [ccr-ca51e8e4-w90hp1, main]
-    paths: ["site/**", "web/**", ".github/workflows/pages.yml"]
+    paths: ['site/**', 'web/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:

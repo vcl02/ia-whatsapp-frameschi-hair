@@ -4,7 +4,9 @@
 
 export function tratar(_req: Request): Response {
   return new Response(
-    JSON.stringify({ erro: "envio pelo painel desativado: responda pelo app do WhatsApp" }),
-    { status: 410, headers: { "Content-Type": "application/json" } },
+    JSON.stringify({
+      erro: 'envio pelo painel desativado: responda pelo app do WhatsApp',
+    }),
+    { status: 410, headers: { 'Content-Type': 'application/json' } },
   );
 }

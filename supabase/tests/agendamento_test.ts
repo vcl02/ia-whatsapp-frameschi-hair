@@ -1,91 +1,190 @@
-import { assertEquals, assertStringIncludes } from "jsr:@std/assert@1.0.13";
+import { assertEquals, assertStringIncludes } from 'jsr:@std/assert@1.0.13';
 import {
-  AgendadorMinhaAgenda, DEF_PROPOR, DEF_REMARCAR, contextoDoAgendamento, dataCurta, resumoDoAgendamento, montarFerramentas, receberComprovante, sinalDoServico, telefoneNacional, valorDoPreco,
-  type DepsComprovante, type DepsFerramentas, type PedidoAgendamento, type Proposta, type RepositorioPropostas,
-} from "../functions/_shared/agendamento.ts";
-import type { Agenda } from "../functions/_shared/disponibilidade.ts";
+  AgendadorMinhaAgenda,
+  contextoDoAgendamento,
+  dataCurta,
+  DEF_PROPOR,
+  DEF_REMARCAR,
+  type DepsComprovante,
+  type DepsFerramentas,
+  montarFerramentas,
+  type PedidoAgendamento,
+  type Proposta,
+  receberComprovante,
+  type RepositorioPropostas,
+  resumoDoAgendamento,
+  sinalDoServico,
+  telefoneNacional,
+  valorDoPreco,
+} from '../functions/_shared/agendamento.ts';
+import type { Agenda } from '../functions/_shared/disponibilidade.ts';
 
 Deno.test("sinal de 20%: valor do preço em texto, 'a partir de' usa o mínimo", () => {
-  assertEquals(valorDoPreco("R$ 30,00"), 30);
-  assertEquals(valorDoPreco("A partir de R$ 1.250,50"), 1250.5);
-  assertEquals(valorDoPreco("sob consulta"), null);
+  assertEquals(valorDoPreco('R$ 30,00'), 30);
+  assertEquals(valorDoPreco('A partir de R$ 1.250,50'), 1250.5);
+  assertEquals(valorDoPreco('sob consulta'), null);
   assertEquals(valorDoPreco(null), null);
-  assertEquals(sinalDoServico("R$ 20,00"), { texto: "R$ 4,00", aPartirDe: false });
-  assertEquals(sinalDoServico("A partir de R$ 60,00"), { texto: "R$ 12,00", aPartirDe: true });
-  assertEquals(sinalDoServico("R$ 450,00", "Progressiva (A partir de)"), { texto: "R$ 90,00", aPartirDe: true });
-  assertEquals(sinalDoServico("R$ 33,33")?.texto, "R$ 6,67");
-  assertEquals(sinalDoServico("consultar"), null);
+  assertEquals(sinalDoServico('R$ 20,00'), { texto: 'R$ 4,00', aPartirDe: false });
+  assertEquals(sinalDoServico('A partir de R$ 60,00'), {
+    texto: 'R$ 12,00',
+    aPartirDe: true,
+  });
+  assertEquals(sinalDoServico('R$ 450,00', 'Progressiva (A partir de)'), {
+    texto: 'R$ 90,00',
+    aPartirDe: true,
+  });
+  assertEquals(sinalDoServico('R$ 33,33')?.texto, 'R$ 6,67');
+  assertEquals(sinalDoServico('consultar'), null);
 });
 
-Deno.test("data curta com dia da semana", () => {
-  assertEquals(dataCurta("2026-11-11"), "quarta-feira, 11/11");
+Deno.test('data curta com dia da semana', () => {
+  assertEquals(dataCurta('2026-11-11'), 'quarta-feira, 11/11');
 });
 
-Deno.test("telefone nacional a partir do wa_id", () => {
-  assertEquals(telefoneNacional("5511992090474"), "11992090474");
-  assertEquals(telefoneNacional("551133334444"), "1133334444");
-  assertEquals(telefoneNacional("14155550123"), null);
+Deno.test('telefone nacional a partir do wa_id', () => {
+  assertEquals(telefoneNacional('5511992090474'), '11992090474');
+  assertEquals(telefoneNacional('551133334444'), '1133334444');
+  assertEquals(telefoneNacional('14155550123'), null);
 });
 
-Deno.test("agendador: login, cadastro com dados da cliente e POST no formato do site", async () => {
+Deno.test('agendador: login, cadastro com dados da cliente e POST no formato do site', async () => {
   const pedidos: Array<{ url: string; body: unknown }> = [];
   const f = (async (url: string, init?: RequestInit) => {
     const u = String(url);
-    pedidos.push({ url: u.replace(/\?.*$/, ""), body: init?.body ? JSON.parse(String(init.body)) : null });
-    if (u.includes("accounts:signUp")) return new Response(JSON.stringify({ idToken: "tc", refreshToken: "r", expiresIn: "3600" }));
-    if (u.includes("GuestSignUp")) return new Response("{}");
-    return new Response(JSON.stringify({ status: "CREATED" }));
+    pedidos.push({
+      url: u.replace(/\?.*$/, ''),
+      body: init?.body ? JSON.parse(String(init.body)) : null,
+    });
+    if (u.includes('accounts:signUp')) {
+      return new Response(
+        JSON.stringify({ idToken: 'tc', refreshToken: 'r', expiresIn: '3600' }),
+      );
+    }
+    if (u.includes('GuestSignUp')) return new Response('{}');
+    return new Response(JSON.stringify({ status: 'CREATED' }));
   }) as typeof fetch;
-  const p: PedidoAgendamento = { nome: "Isa", telefone: "11992090474", profissionalId: 486643, servicoId: 5732343, data: "2026-11-20", hora: "09:00", comentario: "c" };
-  await new AgendadorMinhaAgenda("KEY", f).agendar(p);
+  const p: PedidoAgendamento = {
+    nome: 'Isa',
+    telefone: '11992090474',
+    profissionalId: 486643,
+    servicoId: 5732343,
+    data: '2026-11-20',
+    hora: '09:00',
+    comentario: 'c',
+  };
+  await new AgendadorMinhaAgenda('KEY', f).agendar(p);
   const cad = pedidos[1].body as Record<string, unknown>;
-  assertEquals([cad.name, cad.phone, cad.countryIso], ["Isa", "11992090474", "BR"]);
-  assertEquals(pedidos[2].url, "https://apionline.maapp.com.br/currentUser/appointments");
-  assertEquals(pedidos[2].body, { userCpf: null, appointmentsDto: [{ employeeId: 486643, comments: "c", date: "2026-11-20", startTime: "09:00", serviceIds: [5732343] }] });
+  assertEquals([cad.name, cad.phone, cad.countryIso], ['Isa', '11992090474', 'BR']);
+  assertEquals(pedidos[2].url, 'https://apionline.maapp.com.br/currentUser/appointments');
+  assertEquals(pedidos[2].body, {
+    userCpf: null,
+    appointmentsDto: [{
+      employeeId: 486643,
+      comments: 'c',
+      date: '2026-11-20',
+      startTime: '09:00',
+      serviceIds: [5732343],
+    }],
+  });
 });
 
-Deno.test("agendador: resposta sem CREATED é erro", async () => {
-  const f = (async (url: string) => String(url).includes("signUp")
-    ? new Response(JSON.stringify({ idToken: "t", refreshToken: "r" }))
-    : new Response(String(url).includes("appointments") ? JSON.stringify({ status: "ERROR" }) : "{}")) as typeof fetch;
-  let erro = "";
+Deno.test('agendador: resposta sem CREATED é erro', async () => {
+  const f =
+    (async (url: string) =>
+      String(url).includes('signUp')
+        ? new Response(JSON.stringify({ idToken: 't', refreshToken: 'r' }))
+        : new Response(
+          String(url).includes('appointments')
+            ? JSON.stringify({ status: 'ERROR' })
+            : '{}',
+        )) as typeof fetch;
+  let erro = '';
   try {
-    await new AgendadorMinhaAgenda("K", f).agendar({ nome: "a", telefone: "1", profissionalId: 1, servicoId: 1, data: "2026-11-20", hora: "09:00", comentario: "" });
-  } catch (e) { erro = String(e); }
-  assertStringIncludes(erro, "não criou");
+    await new AgendadorMinhaAgenda('K', f).agendar({
+      nome: 'a',
+      telefone: '1',
+      profissionalId: 1,
+      servicoId: 1,
+      data: '2026-11-20',
+      hora: '09:00',
+      comentario: '',
+    });
+  } catch (e) {
+    erro = String(e);
+  }
+  assertStringIncludes(erro, 'não criou');
 });
 
 // ---------- fluxo propor -> comprovante ----------
 
 class PropostasMemoria implements RepositorioPropostas {
-  itens: Array<Proposta & { status: string; detalhe?: string; cancelamentoPedido?: boolean }> = [];
-  criar(p: Omit<Proposta, "id" | "criadoEm">) {
-    for (const x of this.itens) if (x.conversaId === p.conversaId && x.status === "proposto") x.status = "substituido";
-    const n = { ...p, id: `p${this.itens.length + 1}`, status: "proposto", criadoEm: AGORA.getTime() };
+  itens: Array<
+    Proposta & { status: string; detalhe?: string; cancelamentoPedido?: boolean }
+  > = [];
+  criar(p: Omit<Proposta, 'id' | 'criadoEm'>) {
+    for (const x of this.itens) {
+      if (x.conversaId === p.conversaId && x.status === 'proposto') {
+        x.status = 'substituido';
+      }
+    }
+    const n = {
+      ...p,
+      id: `p${this.itens.length + 1}`,
+      status: 'proposto',
+      criadoEm: AGORA.getTime(),
+    };
     this.itens.push(n);
     return Promise.resolve(n);
   }
-  pendente(c: string) { return Promise.resolve([...this.itens].reverse().find((x) => x.conversaId === c && x.status === "proposto") ?? null); }
+  pendente(c: string) {
+    return Promise.resolve(
+      [...this.itens].reverse().find((x) =>
+        x.conversaId === c && x.status === 'proposto'
+      ) ?? null,
+    );
+  }
   mudarStatus(id: string, de: string, para: string, detalhe?: string) {
     const x = this.itens.find((i) => i.id === id && i.status === de);
-    if (x) { x.status = para; if (detalhe) x.detalhe = detalhe; }
+    if (x) {
+      x.status = para;
+      if (detalhe) x.detalhe = detalhe;
+    }
     return Promise.resolve(!!x);
   }
-  agendadosDesde(c: string) { return Promise.resolve(this.itens.filter((x) => x.conversaId === c && x.status === "agendado").length); }
+  agendadosDesde(c: string) {
+    return Promise.resolve(
+      this.itens.filter((x) => x.conversaId === c && x.status === 'agendado').length,
+    );
+  }
   recente(c: string) {
     const x = [...this.itens].reverse().find((i) => i.conversaId === c);
-    return Promise.resolve(x ? { ...x, atualizadoEm: this.atualizadoEm ?? x.criadoEm } : null);
+    return Promise.resolve(
+      x ? { ...x, atualizadoEm: this.atualizadoEm ?? x.criadoEm } : null,
+    );
   }
   atualizadoEm?: number;
   cancelamentosPedidos: string[] = [];
   agendadoAtivo(c: string, hoje: string) {
-    const x = [...this.itens].reverse().find((i) => i.conversaId === c && i.status === "agendado" && !i.cancelamentoPedido && i.data >= hoje);
+    const x = [...this.itens].reverse().find((i) =>
+      i.conversaId === c && i.status === 'agendado' && !i.cancelamentoPedido &&
+      i.data >= hoje
+    );
     return Promise.resolve(x ?? null);
   }
-  registrarRemarcacao(antigo: Proposta, novo: Omit<Proposta, "id" | "criadoEm" | "expiraEm" | "remarcadoDe">) {
+  registrarRemarcacao(
+    antigo: Proposta,
+    novo: Omit<Proposta, 'id' | 'criadoEm' | 'expiraEm' | 'remarcadoDe'>,
+  ) {
     const velho = this.itens.find((i) => i.id === antigo.id)!;
     velho.cancelamentoPedido = true;
-    const n = { ...novo, id: `p${this.itens.length + 1}`, status: "agendado", criadoEm: AGORA.getTime(), expiraEm: AGORA.getTime(), remarcadoDe: antigo.id };
+    const n = {
+      ...novo,
+      id: `p${this.itens.length + 1}`,
+      status: 'agendado',
+      criadoEm: AGORA.getTime(),
+      expiraEm: AGORA.getTime(),
+      remarcadoDe: antigo.id,
+    };
     this.itens.push(n);
     return Promise.resolve(n);
   }
@@ -97,222 +196,354 @@ class PropostasMemoria implements RepositorioPropostas {
   }
 }
 
-const AGORA = new Date("2026-11-07T12:00:00Z");
+const AGORA = new Date('2026-11-07T12:00:00Z');
 const SERVICOS = [
-  { origem_id: 5732343, nome: "Banho de Lua", preco: "R$ 30,00" },
-  { origem_id: 9, nome: "Progressiva (A partir de)", preco: "R$ 450,00" },
-  { origem_id: 8, nome: "Sob consulta", preco: "consultar" },
+  { origem_id: 5732343, nome: 'Banho de Lua', preco: 'R$ 30,00' },
+  { origem_id: 9, nome: 'Progressiva (A partir de)', preco: 'R$ 450,00' },
+  { origem_id: 8, nome: 'Sob consulta', preco: 'consultar' },
 ];
-const PIX = { chave: "11999990000", titular: "Bruna Frameschi" };
+const PIX = { chave: '11999990000', titular: 'Bruna Frameschi' };
 
-function cenario(opcoes: { livre?: boolean; falharAgendamento?: boolean; semPix?: boolean; semLimiteDiario?: boolean } = {}) {
+function cenario(
+  opcoes: {
+    livre?: boolean;
+    falharAgendamento?: boolean;
+    semPix?: boolean;
+    semLimiteDiario?: boolean;
+  } = {},
+) {
   const propostas = new PropostasMemoria();
   const agendados: PedidoAgendamento[] = [];
   const avisos: Array<[string, string]> = [];
   let livre = opcoes.livre ?? true;
   let falhar = opcoes.falharAgendamento ?? false;
   let agoraAtual = AGORA;
-  const consulta = { vagas: (_s: number, data: string): Promise<Agenda> => Promise.resolve({ data, feriado: false, profissionais: [
-    { id: 486643, nome: "Bruna", horarios: livre ? ["09:00", "11:00"] : ["11:00"] },
-    { id: 1001243, nome: "Alessandra", horarios: [] },
-  ] }) };
-  const agendador = { agendar: (p: PedidoAgendamento) => falhar ? Promise.reject(new Error("HTTP 409")) : (agendados.push(p), Promise.resolve()) };
-  const comuns = { avisar: (a: string, t: string) => (avisos.push([a, t]), Promise.resolve()), log: () => {}, agora: () => agoraAtual };
-  const deps: DepsFerramentas = { consulta, agendador, propostas, pix: opcoes.semPix ? undefined : PIX, maxDias: 15, ...comuns };
-  const depsComp: DepsComprovante = { consulta, agendador, propostas, semLimiteDiario: opcoes.semLimiteDiario, ...comuns };
+  const consulta = {
+    vagas: (_s: number, data: string): Promise<Agenda> =>
+      Promise.resolve({
+        data,
+        feriado: false,
+        profissionais: [
+          { id: 486643, nome: 'Bruna', horarios: livre ? ['09:00', '11:00'] : ['11:00'] },
+          { id: 1001243, nome: 'Alessandra', horarios: [] },
+        ],
+      }),
+  };
+  const agendador = {
+    agendar: (p: PedidoAgendamento) =>
+      falhar
+        ? Promise.reject(new Error('HTTP 409'))
+        : (agendados.push(p), Promise.resolve()),
+  };
+  const comuns = {
+    avisar: (a: string, t: string) => (avisos.push([a, t]), Promise.resolve()),
+    log: () => {},
+    agora: () => agoraAtual,
+  };
+  const deps: DepsFerramentas = {
+    consulta,
+    agendador,
+    propostas,
+    pix: opcoes.semPix ? undefined : PIX,
+    maxDias: 15,
+    ...comuns,
+  };
+  const depsComp: DepsComprovante = {
+    consulta,
+    agendador,
+    propostas,
+    semLimiteDiario: opcoes.semLimiteDiario,
+    ...comuns,
+  };
   return {
-    propostas, agendados, avisos,
-    ferramentas: () => montarFerramentas({ conversaId: "c1", waId: "5511992090474", servicos: SERVICOS }, deps),
-    comprovante: (tipo = "image", conversa = "c1") => receberComprovante({ conversaId: conversa, waId: "5511992090474" }, depsComp, tipo),
-    ocupar: () => { livre = false; },
-    falhar: (v: boolean) => { falhar = v; },
-    avancar: (ms: number) => { agoraAtual = new Date(agoraAtual.getTime() + ms); },
+    propostas,
+    agendados,
+    avisos,
+    ferramentas: () =>
+      montarFerramentas(
+        { conversaId: 'c1', waId: '5511992090474', servicos: SERVICOS },
+        deps,
+      ),
+    comprovante: (tipo = 'image', conversa = 'c1') =>
+      receberComprovante({ conversaId: conversa, waId: '5511992090474' }, depsComp, tipo),
+    ocupar: () => {
+      livre = false;
+    },
+    falhar: (v: boolean) => {
+      falhar = v;
+    },
+    avancar: (ms: number) => {
+      agoraAtual = new Date(agoraAtual.getTime() + ms);
+    },
   };
 }
 
-const PROPOSTA = { servico_id: 5732343, data: "2026-11-10", hora: "09:00", profissional: "Bruna", nome_cliente: "Isa" };
+const PROPOSTA = {
+  servico_id: 5732343,
+  data: '2026-11-10',
+  hora: '09:00',
+  profissional: 'Bruna',
+  nome_cliente: 'Isa',
+};
 
-Deno.test("oferece consulta, proposta e remarcação (a IA não tem ferramenta para agendar sem comprovante)", () => {
-  assertEquals(cenario().ferramentas().definicoes.map((d) => d.name), ["consultar_horarios", DEF_PROPOR.name, DEF_REMARCAR.name]);
+Deno.test('oferece consulta, proposta e remarcação (a IA não tem ferramenta para agendar sem comprovante)', () => {
+  assertEquals(cenario().ferramentas().definicoes.map((d) => d.name), [
+    'consultar_horarios',
+    DEF_PROPOR.name,
+    DEF_REMARCAR.name,
+  ]);
 });
 
-Deno.test("só consulta quando o agendamento está desligado", async () => {
-  const f = montarFerramentas({ conversaId: "c1", waId: "5511992090474", servicos: SERVICOS },
-    { consulta: { vagas: () => Promise.reject(new Error("x")) }, avisar: () => Promise.resolve(), log: () => {}, maxDias: 15, agora: () => AGORA });
-  assertEquals(f.definicoes.map((d) => d.name), ["consultar_horarios"]);
-  assertStringIncludes(await f.executar("confirmar_agendamento", {}), "desconhecida");
+Deno.test('só consulta quando o agendamento está desligado', async () => {
+  const f = montarFerramentas({
+    conversaId: 'c1',
+    waId: '5511992090474',
+    servicos: SERVICOS,
+  }, {
+    consulta: { vagas: () => Promise.reject(new Error('x')) },
+    avisar: () => Promise.resolve(),
+    log: () => {},
+    maxDias: 15,
+    agora: () => AGORA,
+  });
+  assertEquals(f.definicoes.map((d) => d.name), ['consultar_horarios']);
+  assertStringIncludes(await f.executar('confirmar_agendamento', {}), 'desconhecida');
 });
 
-Deno.test("proposta devolve resumo, sinal de 20% e chave Pix, e não agenda", async () => {
+Deno.test('proposta devolve resumo, sinal de 20% e chave Pix, e não agenda', async () => {
   const c = cenario();
-  const r = await c.ferramentas().executar("propor_agendamento", PROPOSTA);
-  assertStringIncludes(r, "R$ 6,00");
-  assertStringIncludes(r, "11999990000");
-  assertStringIncludes(r, "Bruna Frameschi");
-  assertStringIncludes(r, "Ainda NÃO está agendado");
+  const r = await c.ferramentas().executar('propor_agendamento', PROPOSTA);
+  assertStringIncludes(r, 'R$ 6,00');
+  assertStringIncludes(r, '11999990000');
+  assertStringIncludes(r, 'Bruna Frameschi');
+  assertStringIncludes(r, 'Ainda NÃO está agendado');
   assertEquals(c.agendados.length, 0);
   assertEquals(c.propostas.itens[0].expiraEm, AGORA.getTime() + 30 * 60_000);
 });
 
 Deno.test("serviço 'a partir de': sinal sobre o mínimo, avisando que a Bruna confirma", async () => {
-  const r = await cenario().ferramentas().executar("propor_agendamento", { ...PROPOSTA, servico_id: 9 });
-  assertStringIncludes(r, "R$ 90,00");
-  assertStringIncludes(r, "valor mínimo");
+  const r = await cenario().ferramentas().executar('propor_agendamento', {
+    ...PROPOSTA,
+    servico_id: 9,
+  });
+  assertStringIncludes(r, 'R$ 90,00');
+  assertStringIncludes(r, 'valor mínimo');
 });
 
-Deno.test("sem chave Pix ou sem valor legível: não propõe, chama a Bruna", async () => {
-  assertStringIncludes(await cenario({ semPix: true }).ferramentas().executar("propor_agendamento", PROPOSTA), "passar_para_humano = true");
+Deno.test('sem chave Pix ou sem valor legível: não propõe, chama a Bruna', async () => {
+  assertStringIncludes(
+    await cenario({ semPix: true }).ferramentas().executar(
+      'propor_agendamento',
+      PROPOSTA,
+    ),
+    'passar_para_humano = true',
+  );
   const c = cenario();
-  assertStringIncludes(await c.ferramentas().executar("propor_agendamento", { ...PROPOSTA, servico_id: 8 }), "calcular o sinal");
+  assertStringIncludes(
+    await c.ferramentas().executar('propor_agendamento', { ...PROPOSTA, servico_id: 8 }),
+    'calcular o sinal',
+  );
   assertEquals(c.propostas.itens.length, 0);
 });
 
-Deno.test("comprovante com proposta pendente: agenda, avisa a equipe e responde", async () => {
+Deno.test('comprovante com proposta pendente: agenda, avisa a equipe e responde', async () => {
   const c = cenario();
-  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
-  const r = await c.comprovante("image");
-  assertEquals(r?.acao, "responder");
-  assertStringIncludes((r as { texto: string }).texto, "terça-feira, 10/11");
-  assertEquals(c.agendados[0], { nome: "Isa", telefone: "11992090474", profissionalId: 486643, servicoId: 5732343, data: "2026-11-10", hora: "09:00", comentario: "Agendado pelo assistente virtual do WhatsApp (sinal Pix)" });
-  assertEquals(c.propostas.itens[0].status, "agendado");
-  assertEquals(c.propostas.itens[0].detalhe, "comprovante recebido (image)");
+  await c.ferramentas().executar('propor_agendamento', PROPOSTA);
+  const r = await c.comprovante('image');
+  assertEquals(r?.acao, 'responder');
+  assertStringIncludes((r as { texto: string }).texto, 'terça-feira, 10/11');
+  assertEquals(c.agendados[0], {
+    nome: 'Isa',
+    telefone: '11992090474',
+    profissionalId: 486643,
+    servicoId: 5732343,
+    data: '2026-11-10',
+    hora: '09:00',
+    comentario: 'Agendado pelo assistente virtual do WhatsApp (sinal Pix)',
+  });
+  assertEquals(c.propostas.itens[0].status, 'agendado');
+  assertEquals(c.propostas.itens[0].detalhe, 'comprovante recebido (image)');
   assertEquals(c.avisos.length, 1);
-  assertStringIncludes(c.avisos[0][1], "confira o Pix");
-  assertStringIncludes(c.avisos[0][1], "R$ 6,00");
+  assertStringIncludes(c.avisos[0][1], 'confira o Pix');
+  assertStringIncludes(c.avisos[0][1], 'R$ 6,00');
 });
 
-Deno.test("segundo comprovante logo depois de agendar é ignorado", async () => {
+Deno.test('segundo comprovante logo depois de agendar é ignorado', async () => {
   const c = cenario();
-  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
-  await c.comprovante("image");
-  assertEquals(await c.comprovante("document"), { acao: "ignorar" });
+  await c.ferramentas().executar('propor_agendamento', PROPOSTA);
+  await c.comprovante('image');
+  assertEquals(await c.comprovante('document'), { acao: 'ignorar' });
   assertEquals(c.agendados.length, 1);
 });
 
-Deno.test("imagem sem proposta pendente: devolve null (segue o caminho normal)", async () => {
+Deno.test('imagem sem proposta pendente: devolve null (segue o caminho normal)', async () => {
   assertEquals(await cenario().comprovante(), null);
 });
 
-Deno.test("proposta vencida: não agenda e chama a Bruna", async () => {
+Deno.test('proposta vencida: não agenda e chama a Bruna', async () => {
   const c = cenario();
-  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
+  await c.ferramentas().executar('propor_agendamento', PROPOSTA);
   c.avancar(31 * 60_000);
   const r = await c.comprovante();
-  assertEquals(r?.acao, "humano");
+  assertEquals(r?.acao, 'humano');
   assertEquals(c.agendados.length, 0);
-  assertEquals(c.propostas.itens[0].status, "expirado");
+  assertEquals(c.propostas.itens[0].status, 'expirado');
 });
 
-Deno.test("horário ocupado entre a proposta e o comprovante: não agenda e chama a Bruna", async () => {
+Deno.test('horário ocupado entre a proposta e o comprovante: não agenda e chama a Bruna', async () => {
   const c = cenario();
-  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
+  await c.ferramentas().executar('propor_agendamento', PROPOSTA);
   c.ocupar();
   const r = await c.comprovante();
-  assertEquals(r?.acao, "humano");
-  assertStringIncludes((r as { motivo: string }).motivo, "Banho de Lua");
+  assertEquals(r?.acao, 'humano');
+  assertStringIncludes((r as { motivo: string }).motivo, 'Banho de Lua');
   assertEquals(c.agendados.length, 0);
-  assertEquals(c.propostas.itens[0].status, "falhou");
+  assertEquals(c.propostas.itens[0].status, 'falhou');
 });
 
-Deno.test("erro do Minha Agenda: registra falha e chama a Bruna", async () => {
+Deno.test('erro do Minha Agenda: registra falha e chama a Bruna', async () => {
   const c = cenario({ falharAgendamento: true });
-  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
-  assertEquals((await c.comprovante())?.acao, "humano");
-  assertEquals(c.propostas.itens[0].status, "falhou");
+  await c.ferramentas().executar('propor_agendamento', PROPOSTA);
+  assertEquals((await c.comprovante())?.acao, 'humano');
+  assertEquals(c.propostas.itens[0].status, 'falhou');
   assertEquals(c.avisos.length, 0);
 });
 
-Deno.test("um agendamento por conversa por dia, mesmo com comprovante", async () => {
+Deno.test('um agendamento por conversa por dia, mesmo com comprovante', async () => {
   const c = cenario();
-  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
+  await c.ferramentas().executar('propor_agendamento', PROPOSTA);
   await c.comprovante();
   c.avancar(2 * 60 * 60_000); // passou a janela de "segundo comprovante" (1 h), mas não as 24 h
-  await c.ferramentas().executar("propor_agendamento", { ...PROPOSTA, hora: "11:00" });
-  assertEquals((await c.comprovante())?.acao, "humano");
+  await c.ferramentas().executar('propor_agendamento', { ...PROPOSTA, hora: '11:00' });
+  assertEquals((await c.comprovante())?.acao, 'humano');
   assertEquals(c.agendados.length, 1);
 });
 
-Deno.test("proposta valida profissional, horário, nome e serviço", async () => {
+Deno.test('proposta valida profissional, horário, nome e serviço', async () => {
   const f = cenario().ferramentas();
-  assertStringIncludes(await f.executar("propor_agendamento", { ...PROPOSTA, profissional: "Joana" }), "Opções: Bruna, Alessandra");
-  assertStringIncludes(await f.executar("propor_agendamento", { ...PROPOSTA, hora: "10:00" }), "não está mais livre");
-  assertStringIncludes(await f.executar("propor_agendamento", { ...PROPOSTA, hora: "9h" }), "HH:MM");
-  assertStringIncludes(await f.executar("propor_agendamento", { ...PROPOSTA, nome_cliente: " " }), "falta o nome");
-  assertStringIncludes(await f.executar("propor_agendamento", { ...PROPOSTA, servico_id: 1 }), "serviço não encontrado");
-  assertStringIncludes(await f.executar("propor_agendamento", { ...PROPOSTA, data: "2026-12-30" }), "15 dias");
+  assertStringIncludes(
+    await f.executar('propor_agendamento', { ...PROPOSTA, profissional: 'Joana' }),
+    'Opções: Bruna, Alessandra',
+  );
+  assertStringIncludes(
+    await f.executar('propor_agendamento', { ...PROPOSTA, hora: '10:00' }),
+    'não está mais livre',
+  );
+  assertStringIncludes(
+    await f.executar('propor_agendamento', { ...PROPOSTA, hora: '9h' }),
+    'HH:MM',
+  );
+  assertStringIncludes(
+    await f.executar('propor_agendamento', { ...PROPOSTA, nome_cliente: ' ' }),
+    'falta o nome',
+  );
+  assertStringIncludes(
+    await f.executar('propor_agendamento', { ...PROPOSTA, servico_id: 1 }),
+    'serviço não encontrado',
+  );
+  assertStringIncludes(
+    await f.executar('propor_agendamento', { ...PROPOSTA, data: '2026-12-30' }),
+    '15 dias',
+  );
 });
 
-Deno.test("nova proposta substitui a anterior e o comprovante agenda a última", async () => {
+Deno.test('nova proposta substitui a anterior e o comprovante agenda a última', async () => {
   const c = cenario();
-  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
-  await c.ferramentas().executar("propor_agendamento", { ...PROPOSTA, hora: "11:00" });
-  assertEquals(c.propostas.itens.map((i) => i.status), ["substituido", "proposto"]);
+  await c.ferramentas().executar('propor_agendamento', PROPOSTA);
+  await c.ferramentas().executar('propor_agendamento', { ...PROPOSTA, hora: '11:00' });
+  assertEquals(c.propostas.itens.map((i) => i.status), ['substituido', 'proposto']);
   await c.comprovante();
-  assertEquals(c.agendados[0].hora, "11:00");
+  assertEquals(c.agendados[0].hora, '11:00');
 });
 
-Deno.test("contexto da IA: proposta pendente, agendamento recente e nada", async () => {
+Deno.test('contexto da IA: proposta pendente, agendamento recente e nada', async () => {
   const c = cenario();
   const sem = () => Promise.resolve();
-  assertEquals(await contextoDoAgendamento(c.propostas, "c1", AGORA, sem), null);
-  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
-  assertStringIncludes((await contextoDoAgendamento(c.propostas, "c1", AGORA, sem))!, "aguardando o comprovante");
+  assertEquals(await contextoDoAgendamento(c.propostas, 'c1', AGORA, sem), null);
+  await c.ferramentas().executar('propor_agendamento', PROPOSTA);
+  assertStringIncludes(
+    (await contextoDoAgendamento(c.propostas, 'c1', AGORA, sem))!,
+    'aguardando o comprovante',
+  );
   await c.comprovante();
   c.propostas.atualizadoEm = AGORA.getTime();
-  const feito = (await contextoDoAgendamento(c.propostas, "c1", new Date(AGORA.getTime() + 60_000), sem))!;
-  assertStringIncludes(feito, "acabou de agendar");
-  assertStringIncludes(feito, "deixe \"resposta\" vazia");
+  const feito = (await contextoDoAgendamento(
+    c.propostas,
+    'c1',
+    new Date(AGORA.getTime() + 60_000),
+    sem,
+  ))!;
+  assertStringIncludes(feito, 'acabou de agendar');
+  assertStringIncludes(feito, 'deixe "resposta" vazia');
   // 10 minutos depois não é mais "acabou de agendar", mas o agendamento segue ativo (futuro)
-  const depois = (await contextoDoAgendamento(c.propostas, "c1", new Date(AGORA.getTime() + 10 * 60_000), sem))!;
-  assertEquals(depois.includes("acabou de agendar"), false);
-  assertStringIncludes(depois, "Agendamento ativo desta cliente");
+  const depois = (await contextoDoAgendamento(
+    c.propostas,
+    'c1',
+    new Date(AGORA.getTime() + 10 * 60_000),
+    sem,
+  ))!;
+  assertEquals(depois.includes('acabou de agendar'), false);
+  assertStringIncludes(depois, 'Agendamento ativo desta cliente');
 });
 
-Deno.test("contexto da IA: espera o comprovante em processamento terminar", async () => {
+Deno.test('contexto da IA: espera o comprovante em processamento terminar', async () => {
   const c = cenario();
-  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
-  c.propostas.itens[0].status = "agendando";
+  await c.ferramentas().executar('propor_agendamento', PROPOSTA);
+  c.propostas.itens[0].status = 'agendando';
   let esperas = 0;
-  const esperar = () => { esperas++; if (esperas === 2) c.propostas.itens[0].status = "agendado"; return Promise.resolve(); };
+  const esperar = () => {
+    esperas++;
+    if (esperas === 2) c.propostas.itens[0].status = 'agendado';
+    return Promise.resolve();
+  };
   c.propostas.atualizadoEm = AGORA.getTime();
-  assertStringIncludes((await contextoDoAgendamento(c.propostas, "c1", AGORA, esperar))!, "acabou de agendar");
+  assertStringIncludes(
+    (await contextoDoAgendamento(c.propostas, 'c1', AGORA, esperar))!,
+    'acabou de agendar',
+  );
   assertEquals(esperas, 2);
 });
 
-Deno.test("número de teste não tem o limite de 1 agendamento por dia (agenda de novo)", async () => {
+Deno.test('número de teste não tem o limite de 1 agendamento por dia (agenda de novo)', async () => {
   const c = cenario({ semLimiteDiario: true });
-  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
+  await c.ferramentas().executar('propor_agendamento', PROPOSTA);
   await c.comprovante();
   c.avancar(2 * 60 * 60_000);
-  await c.ferramentas().executar("propor_agendamento", { ...PROPOSTA, hora: "11:00" });
-  assertEquals((await c.comprovante())?.acao, "responder");
+  await c.ferramentas().executar('propor_agendamento', { ...PROPOSTA, hora: '11:00' });
+  assertEquals((await c.comprovante())?.acao, 'responder');
   assertEquals(c.agendados.length, 2);
 });
 
-Deno.test("contexto da IA: agendamento ativo traz o roteiro de cancelamento; passado não conta", async () => {
+Deno.test('contexto da IA: agendamento ativo traz o roteiro de cancelamento; passado não conta', async () => {
   const c = cenario();
   const sem = () => Promise.resolve();
-  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
+  await c.ferramentas().executar('propor_agendamento', PROPOSTA);
   await c.comprovante();
   c.propostas.atualizadoEm = AGORA.getTime();
   // 1 dia depois da proposta (10/11 ainda no futuro): sai do bloco de "acabou de agendar" mas segue ativo
   const depois = new Date(AGORA.getTime() + 24 * 60 * 60_000);
-  const t = (await contextoDoAgendamento(c.propostas, "c1", depois, sem))!;
-  assertStringIncludes(t, "Agendamento ativo desta cliente");
-  assertStringIncludes(t, "Banho de Lua, terça-feira, 10/11, às 09:00, com Bruna, no nome de Isa, sinal de R$ 6,00");
-  assertStringIncludes(t, "remarcar_ou_cancelar");
-  assertStringIncludes(t, "O sinal NÃO é devolvido");
+  const t = (await contextoDoAgendamento(c.propostas, 'c1', depois, sem))!;
+  assertStringIncludes(t, 'Agendamento ativo desta cliente');
+  assertStringIncludes(
+    t,
+    'Banho de Lua, terça-feira, 10/11, às 09:00, com Bruna, no nome de Isa, sinal de R$ 6,00',
+  );
+  assertStringIncludes(t, 'remarcar_ou_cancelar');
+  assertStringIncludes(t, 'O sinal NÃO é devolvido');
   // depois do dia do agendamento, não é mais ativo
-  assertEquals(await contextoDoAgendamento(c.propostas, "c1", new Date("2026-11-12T12:00:00Z"), sem), null);
+  assertEquals(
+    await contextoDoAgendamento(c.propostas, 'c1', new Date('2026-11-12T12:00:00Z'), sem),
+    null,
+  );
 });
 
-Deno.test("marcar pedido de cancelamento devolve o resumo; sem agendamento ativo devolve null", async () => {
+Deno.test('marcar pedido de cancelamento devolve o resumo; sem agendamento ativo devolve null', async () => {
   const c = cenario();
-  assertEquals(await c.propostas.marcarCancelamentoPedido("c1", "2026-11-07"), null);
-  await c.ferramentas().executar("propor_agendamento", PROPOSTA);
+  assertEquals(await c.propostas.marcarCancelamentoPedido('c1', '2026-11-07'), null);
+  await c.ferramentas().executar('propor_agendamento', PROPOSTA);
   await c.comprovante();
-  const r = await c.propostas.marcarCancelamentoPedido("c1", "2026-11-07");
-  assertStringIncludes(r!, "Banho de Lua");
+  const r = await c.propostas.marcarCancelamentoPedido('c1', '2026-11-07');
+  assertStringIncludes(r!, 'Banho de Lua');
   assertEquals(c.propostas.cancelamentosPedidos.length, 1);
 });
 
@@ -320,66 +551,109 @@ Deno.test("marcar pedido de cancelamento devolve o resumo; sem agendamento ativo
 
 async function comAgendamento(opcoes: Parameters<typeof cenario>[0] = {}) {
   const c = cenario(opcoes);
-  await c.ferramentas().executar("propor_agendamento", PROPOSTA); // 10/11 09:00 com a Bruna (mais de 24 h depois de AGORA)
+  await c.ferramentas().executar('propor_agendamento', PROPOSTA); // 10/11 09:00 com a Bruna (mais de 24 h depois de AGORA)
   await c.comprovante();
   c.agendados.length = 0;
   c.avisos.length = 0;
   return c;
 }
-const REMARCAR = { data: "2026-11-11", hora: "11:00", profissional: "Bruna" };
+const REMARCAR = { data: '2026-11-11', hora: '11:00', profissional: 'Bruna' };
 
-Deno.test("remarcar: agenda o novo horário, marca o antigo para a Bruna cancelar e avisa", async () => {
+Deno.test('remarcar: agenda o novo horário, marca o antigo para a Bruna cancelar e avisa', async () => {
   const c = await comAgendamento();
-  const r = await c.ferramentas().executar("remarcar_agendamento", REMARCAR);
-  assertStringIncludes(r, "REMARCADO");
-  assertStringIncludes(r, "não peça novo Pix");
+  const r = await c.ferramentas().executar('remarcar_agendamento', REMARCAR);
+  assertStringIncludes(r, 'REMARCADO');
+  assertStringIncludes(r, 'não peça novo Pix');
   assertEquals(c.agendados.length, 1);
-  assertEquals([c.agendados[0].data, c.agendados[0].hora, c.agendados[0].servicoId], ["2026-11-11", "11:00", 5732343]);
+  assertEquals([c.agendados[0].data, c.agendados[0].hora, c.agendados[0].servicoId], [
+    '2026-11-11',
+    '11:00',
+    5732343,
+  ]);
   assertEquals(c.propostas.itens[0].cancelamentoPedido, true); // o antigo
-  assertEquals(c.propostas.itens[1].remarcadoDe, "p1");
+  assertEquals(c.propostas.itens[1].remarcadoDe, 'p1');
   assertEquals(c.avisos.length, 1);
-  assertStringIncludes(c.avisos[0][1], "CANCELE o horário antigo");
-  assertStringIncludes(c.avisos[0][1], "terça-feira, 10/11");
-  assertStringIncludes(c.avisos[0][1], "quarta-feira, 11/11");
+  assertStringIncludes(c.avisos[0][1], 'CANCELE o horário antigo');
+  assertStringIncludes(c.avisos[0][1], 'terça-feira, 10/11');
+  assertStringIncludes(c.avisos[0][1], 'quarta-feira, 11/11');
 });
 
-Deno.test("remarcar: só uma vez por agendamento", async () => {
+Deno.test('remarcar: só uma vez por agendamento', async () => {
   const c = await comAgendamento();
-  await c.ferramentas().executar("remarcar_agendamento", REMARCAR);
-  const r = await c.ferramentas().executar("remarcar_agendamento", { ...REMARCAR, data: "2026-11-12" });
-  assertStringIncludes(r, "já foi remarcado uma vez");
+  await c.ferramentas().executar('remarcar_agendamento', REMARCAR);
+  const r = await c.ferramentas().executar('remarcar_agendamento', {
+    ...REMARCAR,
+    data: '2026-11-12',
+  });
+  assertStringIncludes(r, 'já foi remarcado uma vez');
   assertEquals(c.agendados.length, 1);
 });
 
-Deno.test("remarcar: com menos de 24 h de antecedência não remarca", async () => {
+Deno.test('remarcar: com menos de 24 h de antecedência não remarca', async () => {
   const c = await comAgendamento();
   c.avancar(49 * 60 * 60_000); // 09/11 13:00Z: faltam 23 h para 10/11 09:00 (UTC-3 = 12:00Z)
-  const r = await c.ferramentas().executar("remarcar_agendamento", REMARCAR);
-  assertStringIncludes(r, "menos de 24 horas");
+  const r = await c.ferramentas().executar('remarcar_agendamento', REMARCAR);
+  assertStringIncludes(r, 'menos de 24 horas');
   assertEquals(c.agendados.length, 0);
 });
 
-Deno.test("remarcar: horário ocupado, mesmo horário, sem agendamento e falha do sistema", async () => {
+Deno.test('remarcar: horário ocupado, mesmo horário, sem agendamento e falha do sistema', async () => {
   const sem = cenario();
-  assertStringIncludes(await sem.ferramentas().executar("remarcar_agendamento", REMARCAR), "não há agendamento ativo");
+  assertStringIncludes(
+    await sem.ferramentas().executar('remarcar_agendamento', REMARCAR),
+    'não há agendamento ativo',
+  );
   const c = await comAgendamento();
-  assertStringIncludes(await c.ferramentas().executar("remarcar_agendamento", { ...REMARCAR, hora: "10:00" }), "não está livre");
-  assertStringIncludes(await c.ferramentas().executar("remarcar_agendamento", { ...REMARCAR, profissional: "Joana" }), "Opções: Bruna, Alessandra");
-  assertStringIncludes(await c.ferramentas().executar("remarcar_agendamento", { data: "2026-11-10", hora: "09:00", profissional: "Bruna" }), "já é o horário agendado");
-  assertStringIncludes(await c.ferramentas().executar("remarcar_agendamento", { ...REMARCAR, data: "2026-12-30" }), "15 dias");
+  assertStringIncludes(
+    await c.ferramentas().executar('remarcar_agendamento', {
+      ...REMARCAR,
+      hora: '10:00',
+    }),
+    'não está livre',
+  );
+  assertStringIncludes(
+    await c.ferramentas().executar('remarcar_agendamento', {
+      ...REMARCAR,
+      profissional: 'Joana',
+    }),
+    'Opções: Bruna, Alessandra',
+  );
+  assertStringIncludes(
+    await c.ferramentas().executar('remarcar_agendamento', {
+      data: '2026-11-10',
+      hora: '09:00',
+      profissional: 'Bruna',
+    }),
+    'já é o horário agendado',
+  );
+  assertStringIncludes(
+    await c.ferramentas().executar('remarcar_agendamento', {
+      ...REMARCAR,
+      data: '2026-12-30',
+    }),
+    '15 dias',
+  );
   assertEquals(c.agendados.length, 0);
   const f = await comAgendamento();
   f.falhar(true);
-  assertStringIncludes(await f.ferramentas().executar("remarcar_agendamento", REMARCAR), "nada foi alterado");
+  assertStringIncludes(
+    await f.ferramentas().executar('remarcar_agendamento', REMARCAR),
+    'nada foi alterado',
+  );
   assertEquals(f.propostas.itens.length, 1);
 });
 
-Deno.test("depois de remarcar, o contexto da IA mostra só o agendamento novo (o antigo espera o cancelamento)", async () => {
+Deno.test('depois de remarcar, o contexto da IA mostra só o agendamento novo (o antigo espera o cancelamento)', async () => {
   const c = await comAgendamento();
-  await c.ferramentas().executar("remarcar_agendamento", REMARCAR);
-  const t = (await contextoDoAgendamento(c.propostas, "c1", new Date(AGORA.getTime() + 60_000), () => Promise.resolve()))!;
-  assertStringIncludes(t, "quarta-feira, 11/11");
-  assertEquals(t.includes("terça-feira, 10/11"), false);
-  assertStringIncludes(t, "já foi remarcado uma vez");
-  assertEquals(t.includes("acabou de agendar"), false);
+  await c.ferramentas().executar('remarcar_agendamento', REMARCAR);
+  const t = (await contextoDoAgendamento(
+    c.propostas,
+    'c1',
+    new Date(AGORA.getTime() + 60_000),
+    () => Promise.resolve(),
+  ))!;
+  assertStringIncludes(t, 'quarta-feira, 11/11');
+  assertEquals(t.includes('terça-feira, 10/11'), false);
+  assertStringIncludes(t, 'já foi remarcado uma vez');
+  assertEquals(t.includes('acabou de agendar'), false);
 });

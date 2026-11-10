@@ -2,40 +2,37 @@
 // GET  -> verificação (hub.challenge)
 // POST -> valida X-Hub-Signature-256, grava mensagens, ecos e statuses, responde 200 e processa a resposta do bot em segundo plano.
 
-import { assinaturaValida } from "../_shared/assinatura.ts";
+import { assinaturaValida } from '../_shared/assinatura.ts';
 import {
+  type ConfigWhatsApp,
   enviarTexto,
   filtrarPorListas,
   lerEventos,
-  type ConfigWhatsApp,
-} from "../_shared/whatsapp.ts";
+} from '../_shared/whatsapp.ts';
 import {
   ArmazemSessaoSupabase,
   clienteServico,
   exigirEnv,
   RepositorioPropostasSupabase,
   RepositorioSupabase,
-} from "../_shared/db.ts";
-import {
-  ConsultaMinhaAgenda,
-  hojeSaoPaulo,
-} from "../_shared/disponibilidade.ts";
+} from '../_shared/db.ts';
+import { ConsultaMinhaAgenda, hojeSaoPaulo } from '../_shared/disponibilidade.ts';
 import {
   AgendadorMinhaAgenda,
   contextoDoAgendamento,
   montarFerramentas,
   receberComprovante,
-} from "../_shared/agendamento.ts";
-import { processarMensagem, type DepsBot } from "../_shared/bot.ts";
+} from '../_shared/agendamento.ts';
+import { type DepsBot, processarMensagem } from '../_shared/bot.ts';
 import {
   avisarEquipe,
   enviarEmailResend,
   enviarResumo,
   lerConfigAviso,
-} from "../_shared/aviso.ts";
-import { AtendenteClaude } from "../_shared/llm.ts";
-import { SALAO } from "../_shared/salao.ts";
-import { EVENTO_DE_ERRO, registrarEvento } from "../_shared/eventos.ts";
+} from '../_shared/aviso.ts';
+import { AtendenteClaude } from '../_shared/llm.ts';
+import { SALAO } from '../_shared/salao.ts';
+import { EVENTO_DE_ERRO, registrarEvento } from '../_shared/eventos.ts';
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 
@@ -45,50 +42,50 @@ function log(evento: string, dados: Record<string, unknown> = {}) {
 }
 
 function emSegundoPlano(p: Promise<unknown>) {
-  const seguro = p.catch((e) => log("erro_segundo_plano", { erro: String(e) }));
-  if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(seguro);
+  const seguro = p.catch((e) => log('erro_segundo_plano', { erro: String(e) }));
+  if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(seguro);
   return seguro;
 }
 
 async function tratarInterno(req: Request): Promise<Response> {
   const url = new URL(req.url);
 
-  if (req.method === "GET") {
-    const ok =
-      url.searchParams.get("hub.mode") === "subscribe" &&
-      url.searchParams.get("hub.verify_token") ===
-        exigirEnv("SALAO_WHATSAPP_VERIFY_TOKEN");
+  if (req.method === 'GET') {
+    const ok = url.searchParams.get('hub.mode') === 'subscribe' &&
+      url.searchParams.get('hub.verify_token') ===
+        exigirEnv('SALAO_WHATSAPP_VERIFY_TOKEN');
     return ok
-      ? new Response(url.searchParams.get("hub.challenge") ?? "", {
-          status: 200,
-        })
-      : new Response("forbidden", { status: 403 });
+      ? new Response(url.searchParams.get('hub.challenge') ?? '', {
+        status: 200,
+      })
+      : new Response('forbidden', { status: 403 });
   }
-  if (req.method !== "POST")
-    return new Response("method not allowed", { status: 405 });
+  if (req.method !== 'POST') {
+    return new Response('method not allowed', { status: 405 });
+  }
 
   const corpo = new Uint8Array(await req.arrayBuffer());
   const valida = await assinaturaValida(
     corpo,
-    req.headers.get("x-hub-signature-256"),
-    exigirEnv("SALAO_META_APP_SECRET"),
+    req.headers.get('x-hub-signature-256'),
+    exigirEnv('SALAO_META_APP_SECRET'),
   );
   if (!valida) {
-    log("assinatura_invalida");
-    return new Response("invalid signature", { status: 401 });
+    log('assinatura_invalida');
+    return new Response('invalid signature', { status: 401 });
   }
 
   let payload: unknown;
   try {
     payload = JSON.parse(new TextDecoder().decode(corpo));
   } catch {
-    return new Response("bad request", { status: 400 });
+    return new Response('bad request', { status: 400 });
   }
 
   const wa: ConfigWhatsApp = {
-    token: exigirEnv("SALAO_WHATSAPP_TOKEN"),
-    phoneNumberId: exigirEnv("SALAO_WHATSAPP_PHONE_NUMBER_ID"),
-    graphApiVersion: exigirEnv("SALAO_GRAPH_API_VERSION"),
+    token: exigirEnv('SALAO_WHATSAPP_TOKEN'),
+    phoneNumberId: exigirEnv('SALAO_WHATSAPP_PHONE_NUMBER_ID'),
+    graphApiVersion: exigirEnv('SALAO_GRAPH_API_VERSION'),
   };
   const db = clienteServico();
   const repo = new RepositorioSupabase(db);
@@ -106,21 +103,20 @@ async function tratarInterno(req: Request): Promise<Response> {
     emSegundoPlano(
       Promise.resolve(
         db
-          .from("salao_eventos")
+          .from('salao_eventos')
           .insert({ tipo: evento, detalhe: JSON.stringify(dados).slice(0, 500) }),
       ).then(({ error }) => {
-        if (error) log("falha_gravar_evento", { erro: String(error.message) });
+        if (error) log('falha_gravar_evento', { erro: String(error.message) });
       }),
     );
   };
   // Consulta e agendamento no Minha Agenda: só ligam com a chave do Firebase configurada.
   // O agendamento pode ser desligado à parte com SALAO_AGENDAR=nao.
-  const chaveFirebase = Deno.env.get("SALAO_MA_FIREBASE_KEY");
+  const chaveFirebase = Deno.env.get('SALAO_MA_FIREBASE_KEY');
   const consulta = chaveFirebase
     ? new ConsultaMinhaAgenda(chaveFirebase, new ArmazemSessaoSupabase(db))
     : null;
-  const agendarLigado =
-    !!chaveFirebase && Deno.env.get("SALAO_AGENDAR") !== "nao";
+  const agendarLigado = !!chaveFirebase && Deno.env.get('SALAO_AGENDAR') !== 'nao';
   const aviso = lerConfigAviso((n) => Deno.env.get(n));
   const avisarResumo = (assunto: string, texto: string) =>
     enviarResumo(
@@ -129,29 +125,28 @@ async function tratarInterno(req: Request): Promise<Response> {
       assunto,
       texto,
     );
-  const agendador = agendarLigado
-    ? new AgendadorMinhaAgenda(chaveFirebase!)
-    : undefined;
-  const propostas = agendarLigado
-    ? new RepositorioPropostasSupabase(db)
-    : undefined;
+  const agendador = agendarLigado ? new AgendadorMinhaAgenda(chaveFirebase!) : undefined;
+  const propostas = agendarLigado ? new RepositorioPropostasSupabase(db) : undefined;
   // Chave Pix do sinal (secrets do Supabase). Sem elas a IA não propõe agendamento.
-  const chavePix = Deno.env.get("SALAO_PIX_CHAVE");
-  const titularPix = Deno.env.get("SALAO_PIX_TITULAR");
-  const pix =
-    chavePix && titularPix ? { chave: chavePix, titular: titularPix } : undefined;
+  const chavePix = Deno.env.get('SALAO_PIX_CHAVE');
+  const titularPix = Deno.env.get('SALAO_PIX_TITULAR');
+  const pix = chavePix && titularPix
+    ? { chave: chavePix, titular: titularPix }
+    : undefined;
 
   for (const s of eventos.statuses) {
     await repo.registrarStatus(s);
-    if (s.status === "failed")
-      logar("status_falha", { wamid: s.wamid, erros: s.erros });
+    if (s.status === 'failed') {
+      logar('status_falha', { wamid: s.wamid, erros: s.erros });
+    }
   }
-  for (const e of eventos.ecos)
+  for (const e of eventos.ecos) {
     await repo.registrarEco(e, listas.teste.has(e.para));
+  }
 
   const deps: DepsBot = {
     repo,
-    atendente: new AtendenteClaude(exigirEnv("SALAO_ANTHROPIC_API_KEY")),
+    atendente: new AtendenteClaude(exigirEnv('SALAO_ANTHROPIC_API_KEY')),
     salao: SALAO,
     enviar: (para, texto) => enviarTexto(wa, para, texto),
     avisar: (c, motivo) =>
@@ -164,47 +159,46 @@ async function tratarInterno(req: Request): Promise<Response> {
     esperar: (ms) => new Promise((r) => setTimeout(r, ms)),
     ferramentas: consulta
       ? (ctx) =>
-          montarFerramentas(ctx, {
+        montarFerramentas(ctx, {
+          consulta,
+          agendador,
+          propostas,
+          pix,
+          avisar: avisarResumo,
+          log: logar,
+          maxDias: 15, // o agendamento online abre até 15 dias à frente (Minha Agenda)
+        })
+      : undefined,
+    receberComprovante: consulta && agendador && propostas
+      ? (c, m) =>
+        receberComprovante(
+          { conversaId: c.id, waId: c.waId },
+          {
             consulta,
             agendador,
             propostas,
-            pix,
             avisar: avisarResumo,
             log: logar,
-            maxDias: 15, // o agendamento online abre até 15 dias à frente (Minha Agenda)
-          })
+            semLimiteDiario: listas.teste.has(c.waId),
+          },
+          m.tipo,
+        )
       : undefined,
-    receberComprovante:
-      consulta && agendador && propostas
-        ? (c, m) =>
-            receberComprovante(
-              { conversaId: c.id, waId: c.waId },
-              {
-                consulta,
-                agendador,
-                propostas,
-                avisar: avisarResumo,
-                log: logar,
-                semLimiteDiario: listas.teste.has(c.waId),
-              },
-              m.tipo,
-            )
-        : undefined,
     contextoAgendamento: propostas
       ? (conversaId) =>
-          contextoDoAgendamento(
-            propostas,
-            conversaId,
-            new Date(),
-            (ms) => new Promise((r) => setTimeout(r, ms)),
-          )
+        contextoDoAgendamento(
+          propostas,
+          conversaId,
+          new Date(),
+          (ms) => new Promise((r) => setTimeout(r, ms)),
+        )
       : undefined,
     registrarPedidoCancelamento: propostas
       ? (conversaId) =>
-          propostas.marcarCancelamentoPedido(
-            conversaId,
-            hojeSaoPaulo(new Date()),
-          )
+        propostas.marcarCancelamentoPedido(
+          conversaId,
+          hojeSaoPaulo(new Date()),
+        )
       : undefined,
     log: logar,
   };
@@ -218,19 +212,19 @@ async function tratarInterno(req: Request): Promise<Response> {
     if (!nova) continue; // reenvio da Meta: já tratado
     emSegundoPlano(
       processarMensagem(deps, conversaId, m).then((r) =>
-        log("processado", { conversa: conversaId, resultado: r }),
+        log('processado', { conversa: conversaId, resultado: r })
       ),
     );
   }
 
-  log("webhook", {
+  log('webhook', {
     mensagens: eventos.mensagens.length,
     statuses: eventos.statuses.length,
     ecos: eventos.ecos.length,
     ignorados: eventos.ignorados,
     fora_da_lista: descartados,
   });
-  return new Response("ok", { status: 200 });
+  return new Response('ok', { status: 200 });
 }
 
 /** Quebra geral (falta de secret, banco fora do ar etc.): registra no painel e deixa o erro subir (a Meta reenvia). */
@@ -238,9 +232,9 @@ export async function tratar(req: Request): Promise<Response> {
   try {
     return await tratarInterno(req);
   } catch (e) {
-    log("erro_funcao_webhook", { erro: String(e) });
+    log('erro_funcao_webhook', { erro: String(e) });
     try {
-      await registrarEvento(clienteServico(), "erro_funcao_webhook", {
+      await registrarEvento(clienteServico(), 'erro_funcao_webhook', {
         erro: String(e),
       });
     } catch { /* sem banco ou sem env: o log acima já registrou */ }

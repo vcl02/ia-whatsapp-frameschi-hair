@@ -1,39 +1,36 @@
 // Acesso ao banco com a service role (só dentro das Edge Functions).
 
-import { createClient, type SupabaseClient } from "./deps.ts";
+import { createClient, type SupabaseClient } from './deps.ts';
 import type {
   EcoEnviado,
   ListasNumeros,
   MensagemRecebida,
   ResultadoEnvio,
   StatusRecebido,
-} from "./whatsapp.ts";
-import type { Servico } from "./salao.ts";
-import type { Conversa, Repositorio } from "./bot.ts";
+} from './whatsapp.ts';
+import type { Servico } from './salao.ts';
+import type { Conversa, Repositorio } from './bot.ts';
 import {
   CONFIG_PADRAO,
-  ESFORCOS_PERMITIDOS,
-  MODELOS_PERMITIDOS,
   type ConfigIA,
   type Esforco,
+  ESFORCOS_PERMITIDOS,
   type ItemHistorico,
-} from "./llm.ts";
-import type { ArmazemSessao, Sessao } from "./disponibilidade.ts";
+  MODELOS_PERMITIDOS,
+} from './llm.ts';
+import type { ArmazemSessao, Sessao } from './disponibilidade.ts';
 import {
-  resumoDoAgendamento,
   type Proposta,
   type PropostaRecente,
   type RepositorioPropostas,
-} from "./agendamento.ts";
-import type {
-  PropostaParaLembrete,
-  RepositorioLembretes,
-} from "./lembrete.ts";
+  resumoDoAgendamento,
+} from './agendamento.ts';
+import type { PropostaParaLembrete, RepositorioLembretes } from './lembrete.ts';
 
 export function clienteServico(): SupabaseClient {
   return createClient(
-    exigirEnv("SUPABASE_URL"),
-    exigirEnv("SUPABASE_SERVICE_ROLE_KEY"),
+    exigirEnv('SUPABASE_URL'),
+    exigirEnv('SUPABASE_SERVICE_ROLE_KEY'),
     {
       auth: { persistSession: false },
     },
@@ -67,15 +64,15 @@ export class RepositorioSupabase implements Repositorio {
   ): Promise<{ conversaId: string; nova: boolean }> {
     const existente = checar(
       await this.db
-        .from("salao_conversas")
-        .select("id, bot_pausado")
-        .eq("wa_id", m.waId)
+        .from('salao_conversas')
+        .select('id, bot_pausado')
+        .eq('wa_id', m.waId)
         .maybeSingle(),
     ) as { id: string; bot_pausado: boolean } | null;
     const pausada = existente ? existente.bot_pausado : !iaLigadaParaNovas;
     const conversa = checar(
       await this.db
-        .from("salao_conversas")
+        .from('salao_conversas')
         .upsert(
           {
             wa_id: m.waId,
@@ -84,29 +81,29 @@ export class RepositorioSupabase implements Repositorio {
             atualizado_em: new Date().toISOString(),
             ...(existente ? {} : { bot_pausado: !iaLigadaParaNovas }),
           },
-          { onConflict: "wa_id" },
+          { onConflict: 'wa_id' },
         )
-        .select("id")
+        .select('id')
         .single(),
     ) as { id: string };
 
     const inserida = checar(
       await this.db
-        .from("salao_mensagens")
+        .from('salao_mensagens')
         .upsert(
           {
             conversa_id: conversa.id,
-            direcao: "entrada",
-            autor: "cliente",
+            direcao: 'entrada',
+            autor: 'cliente',
             wamid: m.wamid,
             tipo: m.tipo,
             texto: m.texto,
             fora_contexto: numeroDeTeste && pausada,
             criado_em: m.recebidaEm.toISOString(),
           },
-          { onConflict: "wamid", ignoreDuplicates: true },
+          { onConflict: 'wamid', ignoreDuplicates: true },
         )
-        .select("id"),
+        .select('id'),
     ) as unknown[];
 
     return { conversaId: conversa.id, nova: inserida.length > 0 };
@@ -114,7 +111,7 @@ export class RepositorioSupabase implements Repositorio {
 
   async registrarStatus(s: StatusRecebido): Promise<void> {
     checar(
-      await this.db.from("salao_status").upsert(
+      await this.db.from('salao_status').upsert(
         {
           wamid: s.wamid,
           status: s.status,
@@ -124,7 +121,7 @@ export class RepositorioSupabase implements Repositorio {
           conversation: s.conversation,
           pricing: s.pricing,
         },
-        { onConflict: "wamid,status,ocorrido_em", ignoreDuplicates: true },
+        { onConflict: 'wamid,status,ocorrido_em', ignoreDuplicates: true },
       ),
     );
   }
@@ -135,13 +132,13 @@ export class RepositorioSupabase implements Repositorio {
    */
   async iaAtiva(): Promise<boolean> {
     const { data, error } = await this.db
-      .from("salao_controle")
-      .select("ia_ativa")
-      .eq("id", 1)
+      .from('salao_controle')
+      .select('ia_ativa')
+      .eq('id', 1)
       .maybeSingle();
     if (error) {
       const code = (error as { code?: string }).code;
-      if (code === "42P01" || code === "PGRST205") return true;
+      if (code === '42P01' || code === 'PGRST205') return true;
       throw error;
     }
     return data?.ia_ativa !== false;
@@ -153,9 +150,9 @@ export class RepositorioSupabase implements Repositorio {
    */
   async config(): Promise<ConfigIA> {
     const { data, error } = await this.db
-      .from("salao_controle")
-      .select("modelo, esforco, limite_conversa_hora, limite_global_dia")
-      .eq("id", 1)
+      .from('salao_controle')
+      .select('modelo, esforco, limite_conversa_hora, limite_global_dia')
+      .eq('id', 1)
       .maybeSingle();
     if (error || !data) return CONFIG_PADRAO;
     const r = data as {
@@ -171,25 +168,24 @@ export class RepositorioSupabase implements Repositorio {
       esforco: (ESFORCOS_PERMITIDOS as readonly string[]).includes(r.esforco)
         ? (r.esforco as Esforco)
         : CONFIG_PADRAO.esforco,
-      limiteConversaHora:
-        Number(r.limite_conversa_hora) || CONFIG_PADRAO.limiteConversaHora,
-      limiteGlobalDia:
-        Number(r.limite_global_dia) || CONFIG_PADRAO.limiteGlobalDia,
+      limiteConversaHora: Number(r.limite_conversa_hora) ||
+        CONFIG_PADRAO.limiteConversaHora,
+      limiteGlobalDia: Number(r.limite_global_dia) || CONFIG_PADRAO.limiteGlobalDia,
     };
   }
 
   /** Listas de teste e de familiares (tabela salao_numeros, editada no painel). */
   async listasNumeros(): Promise<ListasNumeros> {
     const { data, error } = await this.db
-      .from("salao_numeros")
-      .select("wa_id, lista");
+      .from('salao_numeros')
+      .select('wa_id, lista');
     if (error) {
       // Migration ainda não aplicada: mantém o comportamento anterior (secret), sem derrubar o webhook.
       const code = (error as { code?: string }).code;
-      if (code === "42P01" || code === "PGRST205") {
-        const antigos = (Deno.env.get("SALAO_SO_RESPONDER_PARA") ?? "")
-          .split(",")
-          .map((s) => s.replace(/\D/g, ""))
+      if (code === '42P01' || code === 'PGRST205') {
+        const antigos = (Deno.env.get('SALAO_SO_RESPONDER_PARA') ?? '')
+          .split(',')
+          .map((s) => s.replace(/\D/g, ''))
           .filter(Boolean);
         return { teste: new Set(antigos), familiar: new Set() };
       }
@@ -197,9 +193,9 @@ export class RepositorioSupabase implements Repositorio {
     }
     const r = data as { wa_id: string; lista: string }[];
     return {
-      teste: new Set(r.filter((x) => x.lista === "teste").map((x) => x.wa_id)),
+      teste: new Set(r.filter((x) => x.lista === 'teste').map((x) => x.wa_id)),
       familiar: new Set(
-        r.filter((x) => x.lista === "familiar").map((x) => x.wa_id),
+        r.filter((x) => x.lista === 'familiar').map((x) => x.wa_id),
       ),
     };
   }
@@ -207,9 +203,9 @@ export class RepositorioSupabase implements Repositorio {
   async conversa(id: string): Promise<Conversa> {
     const r = checar(
       await this.db
-        .from("salao_conversas")
-        .select("id, wa_id, nome_perfil, nome_cliente, bot_pausado")
-        .eq("id", id)
+        .from('salao_conversas')
+        .select('id, wa_id, nome_perfil, nome_cliente, bot_pausado')
+        .eq('id', id)
         .single(),
     ) as {
       id: string;
@@ -230,10 +226,10 @@ export class RepositorioSupabase implements Repositorio {
   async temSaida(conversaId: string): Promise<boolean> {
     const r = checar(
       await this.db
-        .from("salao_mensagens")
-        .select("id")
-        .eq("conversa_id", conversaId)
-        .eq("direcao", "saida")
+        .from('salao_mensagens')
+        .select('id')
+        .eq('conversa_id', conversaId)
+        .eq('direcao', 'saida')
         .limit(1),
     ) as unknown[];
     return r.length > 0;
@@ -242,17 +238,17 @@ export class RepositorioSupabase implements Repositorio {
   async servicosAtivos(): Promise<Servico[]> {
     return checar(
       await this.db
-        .from("salao_servicos")
-        .select("origem_id, nome, preco, duracao, observacao")
-        .eq("ativo", true)
-        .order("ordem")
-        .order("nome"),
+        .from('salao_servicos')
+        .select('origem_id, nome, preco, duracao, observacao')
+        .eq('ativo', true)
+        .order('ordem')
+        .order('nome'),
     ) as Servico[];
   }
 
   async infoSalao(): Promise<Record<string, string>> {
     const r = checar(
-      await this.db.from("salao_info").select("chave, valor"),
+      await this.db.from('salao_info').select('chave, valor'),
     ) as { chave: string; valor: string }[];
     return Object.fromEntries(r.map((x) => [x.chave, x.valor]));
   }
@@ -262,11 +258,11 @@ export class RepositorioSupabase implements Repositorio {
     desde: Date,
   ): Promise<number> {
     let q = this.db
-      .from("salao_mensagens")
-      .select("id", { count: "exact", head: true })
-      .eq("autor", "bot")
-      .gte("criado_em", desde.toISOString());
-    if (conversaId) q = q.eq("conversa_id", conversaId);
+      .from('salao_mensagens')
+      .select('id', { count: 'exact', head: true })
+      .eq('autor', 'bot')
+      .gte('criado_em', desde.toISOString());
+    if (conversaId) q = q.eq('conversa_id', conversaId);
     const { count, error } = await q;
     if (error) throw error;
     return count ?? 0;
@@ -275,9 +271,9 @@ export class RepositorioSupabase implements Repositorio {
   async ultimoInboundDe(waId: string): Promise<Date | null> {
     const r = checar(
       await this.db
-        .from("salao_conversas")
-        .select("ultimo_inbound_em")
-        .eq("wa_id", waId)
+        .from('salao_conversas')
+        .select('ultimo_inbound_em')
+        .eq('wa_id', waId)
         .maybeSingle(),
     ) as { ultimo_inbound_em: string | null } | null;
     return r?.ultimo_inbound_em ? new Date(r.ultimo_inbound_em) : null;
@@ -291,40 +287,40 @@ export class RepositorioSupabase implements Repositorio {
     // Se o wamid já existe, a mensagem foi enviada por nós (bot ou tela): ignora.
     const ja = checar(
       await this.db
-        .from("salao_mensagens")
-        .select("id")
-        .eq("wamid", e.wamid)
+        .from('salao_mensagens')
+        .select('id')
+        .eq('wamid', e.wamid)
         .limit(1),
     ) as unknown[];
     if (ja.length > 0) return;
     const conversa = checar(
       await this.db
-        .from("salao_conversas")
+        .from('salao_conversas')
         .upsert(
           {
             wa_id: e.para,
             bot_pausado: true,
             atualizado_em: new Date().toISOString(),
           },
-          { onConflict: "wa_id" },
+          { onConflict: 'wa_id' },
         )
-        .select("id")
+        .select('id')
         .single(),
     ) as { id: string };
     checar(
-      await this.db.from("salao_mensagens").upsert(
+      await this.db.from('salao_mensagens').upsert(
         {
           conversa_id: conversa.id,
-          direcao: "saida",
-          autor: "humano",
+          direcao: 'saida',
+          autor: 'humano',
           wamid: e.wamid,
           tipo: e.tipo,
           texto: e.texto,
-          status: "enviada_pelo_app",
+          status: 'enviada_pelo_app',
           fora_contexto: numeroDeTeste,
           criado_em: e.enviadaEm.toISOString(),
         },
-        { onConflict: "wamid", ignoreDuplicates: true },
+        { onConflict: 'wamid', ignoreDuplicates: true },
       ),
     );
   }
@@ -332,11 +328,11 @@ export class RepositorioSupabase implements Repositorio {
   async ultimaEntradaWamid(conversaId: string): Promise<string | null> {
     const r = checar(
       await this.db
-        .from("salao_mensagens")
-        .select("wamid")
-        .eq("conversa_id", conversaId)
-        .eq("direcao", "entrada")
-        .order("criado_em", { ascending: false })
+        .from('salao_mensagens')
+        .select('wamid')
+        .eq('conversa_id', conversaId)
+        .eq('direcao', 'entrada')
+        .order('criado_em', { ascending: false })
         .limit(1),
     ) as { wamid: string | null }[];
     return r[0]?.wamid ?? null;
@@ -348,14 +344,14 @@ export class RepositorioSupabase implements Repositorio {
   ): Promise<ItemHistorico[]> {
     const r = checar(
       await this.db
-        .from("salao_mensagens")
-        .select("autor, texto, tipo")
-        .eq("conversa_id", conversaId)
-        .eq("fora_contexto", false)
-        .order("criado_em", { ascending: false })
+        .from('salao_mensagens')
+        .select('autor, texto, tipo')
+        .eq('conversa_id', conversaId)
+        .eq('fora_contexto', false)
+        .order('criado_em', { ascending: false })
         .limit(limite),
     ) as {
-      autor: ItemHistorico["autor"];
+      autor: ItemHistorico['autor'];
       texto: string | null;
       tipo: string;
     }[];
@@ -366,41 +362,41 @@ export class RepositorioSupabase implements Repositorio {
 
   async registrarSaida(
     conversaId: string,
-    autor: "bot" | "humano",
+    autor: 'bot' | 'humano',
     texto: string,
     envio: ResultadoEnvio,
   ): Promise<void> {
     checar(
-      await this.db.from("salao_mensagens").insert({
+      await this.db.from('salao_mensagens').insert({
         conversa_id: conversaId,
-        direcao: "saida",
+        direcao: 'saida',
         autor,
         wamid: envio.wamid,
-        tipo: "text",
+        tipo: 'text',
         texto,
-        status: envio.ok ? "aceita" : "erro_envio",
+        status: envio.ok ? 'aceita' : 'erro_envio',
         erro: envio.ok ? null : { http: envio.httpStatus, erro: envio.erro },
       }),
     );
     checar(
       await this.db
-        .from("salao_conversas")
+        .from('salao_conversas')
         .update({ atualizado_em: new Date().toISOString() })
-        .eq("id", conversaId),
+        .eq('id', conversaId),
     );
   }
 
   async marcarHumano(conversaId: string, motivo: string): Promise<void> {
     checar(
       await this.db
-        .from("salao_conversas")
+        .from('salao_conversas')
         .update({
           bot_pausado: true,
           precisa_humano: true,
           motivo_humano: motivo,
           atualizado_em: new Date().toISOString(),
         })
-        .eq("id", conversaId),
+        .eq('id', conversaId),
     );
   }
 }
@@ -412,9 +408,9 @@ export class ArmazemSessaoSupabase implements ArmazemSessao {
   async ler(): Promise<Sessao | null> {
     const r = checar(
       await this.db
-        .from("salao_sessao_minhaagenda")
-        .select("id_token, refresh_token, expira_em, cadastrado")
-        .eq("id", 1)
+        .from('salao_sessao_minhaagenda')
+        .select('id_token, refresh_token, expira_em, cadastrado')
+        .eq('id', 1)
         .maybeSingle(),
     ) as {
       id_token: string;
@@ -424,23 +420,23 @@ export class ArmazemSessaoSupabase implements ArmazemSessao {
     } | null;
     return r
       ? {
-          idToken: r.id_token,
-          refreshToken: r.refresh_token,
-          expiraEm: new Date(r.expira_em).getTime(),
-          cadastrado: r.cadastrado,
-        }
+        idToken: r.id_token,
+        refreshToken: r.refresh_token,
+        expiraEm: new Date(r.expira_em).getTime(),
+        cadastrado: r.cadastrado,
+      }
       : null;
   }
 
   async gravar(s: Sessao | null): Promise<void> {
     if (!s) {
       checar(
-        await this.db.from("salao_sessao_minhaagenda").delete().eq("id", 1),
+        await this.db.from('salao_sessao_minhaagenda').delete().eq('id', 1),
       );
       return;
     }
     checar(
-      await this.db.from("salao_sessao_minhaagenda").upsert({
+      await this.db.from('salao_sessao_minhaagenda').upsert({
         id: 1,
         id_token: s.idToken,
         refresh_token: s.refreshToken,
@@ -492,20 +488,20 @@ function paraProposta(r: LinhaAgendamento): Proposta {
 export class RepositorioPropostasSupabase implements RepositorioPropostas {
   constructor(private db: SupabaseClient) {}
 
-  async criar(p: Omit<Proposta, "id" | "criadoEm">): Promise<Proposta> {
+  async criar(p: Omit<Proposta, 'id' | 'criadoEm'>): Promise<Proposta> {
     checar(
       await this.db
-        .from("salao_agendamentos")
+        .from('salao_agendamentos')
         .update({
-          status: "substituido",
+          status: 'substituido',
           atualizado_em: new Date().toISOString(),
         })
-        .eq("conversa_id", p.conversaId)
-        .eq("status", "proposto"),
+        .eq('conversa_id', p.conversaId)
+        .eq('status', 'proposto'),
     );
     const r = checar(
       await this.db
-        .from("salao_agendamentos")
+        .from('salao_agendamentos')
         .insert({
           conversa_id: p.conversaId,
           servico_origem_id: p.servicoId,
@@ -516,10 +512,10 @@ export class RepositorioPropostasSupabase implements RepositorioPropostas {
           hora: p.hora,
           preco: p.preco,
           nome_cliente: p.nomeCliente,
-          status: "proposto",
+          status: 'proposto',
           expira_em: new Date(p.expiraEm).toISOString(),
         })
-        .select("*")
+        .select('*')
         .single(),
     ) as LinhaAgendamento;
     return paraProposta(r);
@@ -528,16 +524,16 @@ export class RepositorioPropostasSupabase implements RepositorioPropostas {
   async recente(conversaId: string): Promise<PropostaRecente | null> {
     const r = checar(
       await this.db
-        .from("salao_agendamentos")
-        .select("*")
-        .eq("conversa_id", conversaId)
-        .order("criado_em", { ascending: false })
+        .from('salao_agendamentos')
+        .select('*')
+        .eq('conversa_id', conversaId)
+        .order('criado_em', { ascending: false })
         .limit(1),
     ) as LinhaAgendamento[];
     if (!r[0]) return null;
     return {
       ...paraProposta(r[0]),
-      status: r[0].status ?? "",
+      status: r[0].status ?? '',
       atualizadoEm: new Date(r[0].atualizado_em ?? r[0].criado_em).getTime(),
     };
   }
@@ -545,11 +541,11 @@ export class RepositorioPropostasSupabase implements RepositorioPropostas {
   async pendente(conversaId: string): Promise<Proposta | null> {
     const r = checar(
       await this.db
-        .from("salao_agendamentos")
-        .select("*")
-        .eq("conversa_id", conversaId)
-        .eq("status", "proposto")
-        .order("criado_em", { ascending: false })
+        .from('salao_agendamentos')
+        .select('*')
+        .eq('conversa_id', conversaId)
+        .eq('status', 'proposto')
+        .order('criado_em', { ascending: false })
         .limit(1),
     ) as LinhaAgendamento[];
     return r[0] ? paraProposta(r[0]) : null;
@@ -563,15 +559,15 @@ export class RepositorioPropostasSupabase implements RepositorioPropostas {
   ): Promise<boolean> {
     const r = checar(
       await this.db
-        .from("salao_agendamentos")
+        .from('salao_agendamentos')
         .update({
           status: para,
           atualizado_em: new Date().toISOString(),
           ...(detalhe ? { detalhe } : {}),
         })
-        .eq("id", id)
-        .eq("status", de)
-        .select("id"),
+        .eq('id', id)
+        .eq('status', de)
+        .select('id'),
     ) as unknown[];
     return r.length > 0;
   }
@@ -582,13 +578,13 @@ export class RepositorioPropostasSupabase implements RepositorioPropostas {
   ): Promise<Proposta | null> {
     const r = checar(
       await this.db
-        .from("salao_agendamentos")
-        .select("*")
-        .eq("conversa_id", conversaId)
-        .eq("status", "agendado")
-        .is("cancelamento_pedido_em", null)
-        .gte("data", hoje)
-        .order("atualizado_em", { ascending: false })
+        .from('salao_agendamentos')
+        .select('*')
+        .eq('conversa_id', conversaId)
+        .eq('status', 'agendado')
+        .is('cancelamento_pedido_em', null)
+        .gte('data', hoje)
+        .order('atualizado_em', { ascending: false })
         .limit(1),
     ) as LinhaAgendamento[];
     return r[0] ? paraProposta(r[0]) : null;
@@ -602,21 +598,21 @@ export class RepositorioPropostasSupabase implements RepositorioPropostas {
     if (!ativo) return null;
     checar(
       await this.db
-        .from("salao_agendamentos")
+        .from('salao_agendamentos')
         .update({ cancelamento_pedido_em: new Date().toISOString() })
-        .eq("id", ativo.id),
+        .eq('id', ativo.id),
     );
     return resumoDoAgendamento(ativo);
   }
 
   async registrarRemarcacao(
     antigo: Proposta,
-    novo: Omit<Proposta, "id" | "criadoEm" | "expiraEm" | "remarcadoDe">,
+    novo: Omit<Proposta, 'id' | 'criadoEm' | 'expiraEm' | 'remarcadoDe'>,
   ): Promise<Proposta> {
     const agora = new Date().toISOString();
     const r = checar(
       await this.db
-        .from("salao_agendamentos")
+        .from('salao_agendamentos')
         .insert({
           conversa_id: novo.conversaId,
           servico_origem_id: novo.servicoId,
@@ -627,34 +623,34 @@ export class RepositorioPropostasSupabase implements RepositorioPropostas {
           hora: novo.hora,
           preco: novo.preco,
           nome_cliente: novo.nomeCliente,
-          status: "agendado",
-          detalhe: "remarcação (sinal do agendamento anterior)",
+          status: 'agendado',
+          detalhe: 'remarcação (sinal do agendamento anterior)',
           expira_em: agora,
           remarcado_de: antigo.id,
         })
-        .select("*")
+        .select('*')
         .single(),
     ) as LinhaAgendamento;
     checar(
       await this.db
-        .from("salao_agendamentos")
+        .from('salao_agendamentos')
         .update({
           cancelamento_pedido_em: agora,
-          detalhe: "remarcado: cancelar este horário no Minha Agenda",
+          detalhe: 'remarcado: cancelar este horário no Minha Agenda',
           atualizado_em: agora,
         })
-        .eq("id", antigo.id),
+        .eq('id', antigo.id),
     );
     return paraProposta(r);
   }
 
   async agendadosDesde(conversaId: string, desde: Date): Promise<number> {
     const { count, error } = await this.db
-      .from("salao_agendamentos")
-      .select("id", { count: "exact", head: true })
-      .eq("conversa_id", conversaId)
-      .eq("status", "agendado")
-      .gte("atualizado_em", desde.toISOString());
+      .from('salao_agendamentos')
+      .select('id', { count: 'exact', head: true })
+      .eq('conversa_id', conversaId)
+      .eq('status', 'agendado')
+      .gte('atualizado_em', desde.toISOString());
     if (error) throw error;
     return count ?? 0;
   }
@@ -667,12 +663,12 @@ export class LembretesSupabase implements RepositorioLembretes {
   async listar(): Promise<PropostaParaLembrete[]> {
     const r = checar(
       await this.db
-        .from("salao_agendamentos")
+        .from('salao_agendamentos')
         .select(
-          "id, conversa_id, nome_cliente, servico_nome, data, hora, preco, criado_em, expira_em, lembretes, salao_conversas(wa_id, bot_pausado)",
+          'id, conversa_id, nome_cliente, servico_nome, data, hora, preco, criado_em, expira_em, lembretes, salao_conversas(wa_id, bot_pausado)',
         )
-        .eq("status", "proposto")
-        .gt("expira_em", new Date(Date.now() - 60 * 60_000).toISOString()),
+        .eq('status', 'proposto')
+        .gt('expira_em', new Date(Date.now() - 60 * 60_000).toISOString()),
     ) as Array<
       LinhaAgendamento & {
         lembretes: number;
@@ -714,17 +710,17 @@ export class LembretesSupabase implements RepositorioLembretes {
   ): Promise<boolean> {
     const r = checar(
       await this.db
-        .from("salao_agendamentos")
+        .from('salao_agendamentos')
         .update({
           lembretes: atual + 1,
           ...(expirar
-            ? { status: "expirado", atualizado_em: new Date().toISOString() }
+            ? { status: 'expirado', atualizado_em: new Date().toISOString() }
             : {}),
         })
-        .eq("id", id)
-        .eq("lembretes", atual)
-        .eq("status", "proposto")
-        .select("id"),
+        .eq('id', id)
+        .eq('lembretes', atual)
+        .eq('status', 'proposto')
+        .select('id'),
     ) as unknown[];
     return r.length > 0;
   }

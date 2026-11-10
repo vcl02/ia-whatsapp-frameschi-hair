@@ -7,13 +7,13 @@
 //  4. GET availableTimes por profissional -> horários livres.
 // O bot nunca usa nome/telefone de cliente aqui e nunca agenda nada.
 
-const API = "https://apionline.maapp.com.br";
-export const SLUG = "Brunaframeschihair";
+const API = 'https://apionline.maapp.com.br';
+export const SLUG = 'Brunaframeschihair';
 // Identidade fixa da consulta, pedida pelo Victor em 2026-11-07.
 export const IDENTIDADE = {
-  name: "Bruna Frameschi",
-  phone: "11988973181",
-  countryIso: "BR",
+  name: 'Bruna Frameschi',
+  phone: '11988973181',
+  countryIso: 'BR',
 };
 
 export interface Sessao {
@@ -38,15 +38,15 @@ export interface Vaga {
 }
 
 type Obj = Record<string, unknown>;
-const obj = (v: unknown): Obj => (v && typeof v === "object" ? (v as Obj) : {});
+const obj = (v: unknown): Obj => (v && typeof v === 'object' ? (v as Obj) : {});
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
 export class FalhaConsulta extends Error {}
 
 const cabecalhosApi = (token?: string): Record<string, string> => ({
-  accept: "application/json, text/plain, */*",
-  check: "1",
-  Referer: "https://online.maapp.com.br/",
+  accept: 'application/json, text/plain, */*',
+  check: '1',
+  Referer: 'https://online.maapp.com.br/',
   ...(token ? { authorization: `Bearer ${token}` } : {}),
 });
 
@@ -58,11 +58,11 @@ export function lerProfissionais(json: unknown): Profissional[] {
     for (const p of arr(obj(bloco).listEmployeeInfo)) {
       const e = obj(p);
       if (
-        typeof e.id === "number" &&
-        typeof e.name === "string" &&
+        typeof e.id === 'number' &&
+        typeof e.name === 'string' &&
         !out.some((x) => x.id === e.id)
       ) {
-        out.push({ id: e.id, nome: e.name.trim().replace(/\s+/g, " ") });
+        out.push({ id: e.id, nome: e.name.trim().replace(/\s+/g, ' ') });
       }
     }
   }
@@ -73,7 +73,7 @@ export function lerVagas(json: unknown): { vagas: Vaga[]; feriado: boolean } {
   const raiz = obj(json);
   const vagas = arr(raiz.listAppointmentAvailabilityDTO).flatMap((v) => {
     const x = obj(v);
-    return typeof x.startTime === "string" && typeof x.endTime === "string"
+    return typeof x.startTime === 'string' && typeof x.endTime === 'string'
       ? [{ inicio: x.startTime, fim: x.endTime }]
       : [];
   });
@@ -82,14 +82,14 @@ export function lerVagas(json: unknown): { vagas: Vaga[]; feriado: boolean } {
 
 /** "Bruna Stefani frameschi" -> "Bruna": é como as clientes chamam. */
 export function primeiroNome(nome: string): string {
-  const p = nome.trim().split(/\s+/)[0] ?? "";
+  const p = nome.trim().split(/\s+/)[0] ?? '';
   return p ? p[0].toUpperCase() + p.slice(1).toLowerCase() : nome;
 }
 
 /** Hoje em São Paulo, AAAA-MM-DD. */
 export function hojeSaoPaulo(agora = new Date()): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
   }).format(agora);
 }
 
@@ -103,15 +103,16 @@ export function validarData(
     !/^\d{4}-\d{2}-\d{2}$/.test(data) ||
     Number.isNaN(Date.parse(`${data}T12:00:00Z`))
   ) {
-    return "data inválida: use o formato AAAA-MM-DD";
+    return 'data inválida: use o formato AAAA-MM-DD';
   }
   const hoje = Date.parse(`${hojeSaoPaulo(agora)}T12:00:00Z`);
   const dias = Math.round(
     (Date.parse(`${data}T12:00:00Z`) - hoje) / 86_400_000,
   );
-  if (dias < 0) return "essa data já passou";
-  if (dias > maxDias)
+  if (dias < 0) return 'essa data já passou';
+  if (dias > maxDias) {
     return `o agendamento online só abre até ${maxDias} dias à frente`;
+  }
   return null;
 }
 
@@ -125,16 +126,16 @@ export async function loginAnonimo(
   const r = await fetchFn(
     `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${firebaseKey}`,
     {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ returnSecureToken: true }),
     },
   );
   const j = obj(await r.json().catch(() => ({})));
   if (
     !r.ok ||
-    typeof j.idToken !== "string" ||
-    typeof j.refreshToken !== "string"
+    typeof j.idToken !== 'string' ||
+    typeof j.refreshToken !== 'string'
   ) {
     throw new FalhaConsulta(`login anônimo falhou (HTTP ${r.status})`);
   }
@@ -158,8 +159,8 @@ export async function cadastrarConvidada(
   fetchFn: typeof fetch = fetch,
 ): Promise<void> {
   const r = await fetchFn(`${API}/accounts/firebaseGuestSignUp`, {
-    method: "POST",
-    headers: { ...cabecalhosApi(), "content-type": "application/json" },
+    method: 'POST',
+    headers: { ...cabecalhosApi(), 'content-type': 'application/json' },
     body: JSON.stringify({
       ...identidade,
       email: null,
@@ -168,8 +169,9 @@ export async function cadastrarConvidada(
     }),
   });
   await r.body?.cancel();
-  if (!r.ok)
+  if (!r.ok) {
     throw new FalhaConsulta(`cadastro de convidada falhou (HTTP ${r.status})`);
+  }
 }
 
 export { API, cabecalhosApi };
@@ -194,21 +196,22 @@ export class ConsultaMinhaAgenda {
     const r = await this.fetchFn(
       `https://securetoken.googleapis.com/v1/token?key=${this.firebaseKey}`,
       {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-          grant_type: "refresh_token",
+          grant_type: 'refresh_token',
           refresh_token: s.refreshToken,
         }).toString(),
       },
     );
     const j = obj(await r.json().catch(() => ({})));
-    if (!r.ok || typeof j.id_token !== "string") return null;
+    if (!r.ok || typeof j.id_token !== 'string') return null;
     return {
       ...s,
       idToken: j.id_token,
-      refreshToken:
-        typeof j.refresh_token === "string" ? j.refresh_token : s.refreshToken,
+      refreshToken: typeof j.refresh_token === 'string'
+        ? j.refresh_token
+        : s.refreshToken,
       expiraEm: this.agora() + Number(j.expires_in ?? 3600) * 1000,
     };
   }
@@ -244,7 +247,7 @@ export class ConsultaMinhaAgenda {
       }
       return await r.json();
     }
-    throw new FalhaConsulta("Minha Agenda recusou a sessão");
+    throw new FalhaConsulta('Minha Agenda recusou a sessão');
   }
 
   /** Vagas por profissional. Cache de 5 min por serviço+data, a menos que `semCache`. */
@@ -298,11 +301,14 @@ export interface Agenda {
 
 export function agendaEmTexto(a: Agenda): string {
   if (a.feriado) return `${a.data} é feriado: não há atendimento.`;
-  if (a.profissionais.length === 0)
+  if (a.profissionais.length === 0) {
     return `Em ${a.data} ninguém atende esse serviço pelo agendamento online.`;
+  }
   const linhas = a.profissionais.map(
     (p) =>
-      `${p.nome}: ${p.horarios.length ? p.horarios.join(", ") : "sem horários livres"}`,
+      `${p.nome}: ${p.horarios.length ? p.horarios.join(', ') : 'sem horários livres'}`,
   );
-  return `Horários livres em ${a.data} (consulta feita agora; podem ser ocupados a qualquer momento):\n${linhas.join("\n")}`;
+  return `Horários livres em ${a.data} (consulta feita agora; podem ser ocupados a qualquer momento):\n${
+    linhas.join('\n')
+  }`;
 }
