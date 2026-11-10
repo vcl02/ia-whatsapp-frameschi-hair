@@ -66,10 +66,13 @@ export interface DepsBot {
   /** Situação do agendamento da conversa em texto para a IA (ou null). */
   contextoAgendamento?: (conversaId: string) => Promise<string | null>;
   /**
-   * A cliente pediu para cancelar ou remarcar: marca o agendamento dela e devolve o
-   * resumo (ou null se ela não tem agendamento ativo).
+   * A cliente pediu para cancelar ou remarcar: garante o pedido no painel da Bruna e
+   * devolve o resumo dele (ou null se não houver como registrar).
    */
-  registrarPedidoCancelamento?: (conversaId: string) => Promise<string | null>;
+  registrarPedidoCancelamento?: (
+    conversaId: string,
+    motivo: string,
+  ) => Promise<string | null>;
   /** Número entre 0 e 1 (Math.random). Injetável para os testes. */
   aleatorio?: () => number;
   log(evento: string, dados?: Record<string, unknown>): void;
@@ -360,11 +363,11 @@ export async function processarMensagem(
     let motivo = decisao.motivo || 'decisão da IA';
     if (decisao.intencao === 'remarcar_ou_cancelar') {
       const agendamento = await deps
-        .registrarPedidoCancelamento?.(c.id)
+        .registrarPedidoCancelamento?.(c.id, motivo)
         .catch(() => null);
       if (agendamento) {
         motivo =
-          `${motivo} (Agendamento da cliente: ${agendamento}. Cancele ou remarque no Minha Agenda. O sinal não é devolvido.)`;
+          `${motivo} (Pedido da cliente: ${agendamento}. Veja no painel, finalize no Minha Agenda e avise a cliente. O sinal não é devolvido.)`;
       }
     }
     await marcarEAvisar(deps, c, motivo);

@@ -13,6 +13,7 @@ import {
   ArmazemSessaoSupabase,
   clienteServico,
   exigirEnv,
+  RepositorioPedidosSupabase,
   RepositorioPropostasSupabase,
   RepositorioSupabase,
 } from '../_shared/db.ts';
@@ -20,6 +21,7 @@ import { ConsultaMinhaAgenda, hojeSaoPaulo } from '../_shared/disponibilidade.ts
 import {
   AgendadorMinhaAgenda,
   contextoDoAgendamento,
+  garantirPedido,
   montarFerramentas,
   receberComprovante,
 } from '../_shared/agendamento.ts';
@@ -135,6 +137,7 @@ async function tratarInterno(req: Request): Promise<Response> {
     );
   const agendador = agendarLigado ? new AgendadorMinhaAgenda(chaveFirebase!) : undefined;
   const propostas = agendarLigado ? new RepositorioPropostasSupabase(db) : undefined;
+  const pedidos = new RepositorioPedidosSupabase(db);
   // Chave Pix do sinal (secrets do Supabase). Sem elas a IA não propõe agendamento.
   const chavePix = Deno.env.get('SALAO_PIX_CHAVE');
   const titularPix = Deno.env.get('SALAO_PIX_TITULAR');
@@ -171,6 +174,7 @@ async function tratarInterno(req: Request): Promise<Response> {
           consulta,
           agendador,
           propostas,
+          pedidos,
           pix,
           avisar: avisarResumo,
           log: logar,
@@ -201,13 +205,14 @@ async function tratarInterno(req: Request): Promise<Response> {
           (ms) => new Promise((r) => setTimeout(r, ms)),
         )
       : undefined,
-    registrarPedidoCancelamento: propostas
-      ? (conversaId) =>
-        propostas.marcarCancelamentoPedido(
-          conversaId,
-          hojeSaoPaulo(new Date()),
-        )
-      : undefined,
+    registrarPedidoCancelamento: (conversaId, motivo) =>
+      garantirPedido(
+        pedidos,
+        propostas,
+        conversaId,
+        motivo,
+        hojeSaoPaulo(new Date()),
+      ),
     log: logar,
   };
 

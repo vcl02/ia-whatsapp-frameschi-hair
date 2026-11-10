@@ -90,28 +90,57 @@ export const DEF_PROPOR: DefinicaoFerramenta = {
   },
 };
 
-export const DEF_REMARCAR: DefinicaoFerramenta = {
-  name: 'remarcar_agendamento',
+export const DEF_PEDIDO: DefinicaoFerramenta = {
+  name: 'registrar_pedido_para_bruna',
   description:
-    'Remarca o agendamento ativo da cliente (feito por este assistente) para outro dia e horário do MESMO serviço. ' +
-    'Use só depois de consultar_horarios mostrar o horário livre e a cliente confirmar o novo dia e horário. ' +
-    'O sistema agenda o novo horário (o sinal já pago vale) e avisa a Bruna para cancelar o antigo. ' +
-    'Só uma remarcação por agendamento e só com 24 horas ou mais de antecedência.',
+    'Registra no painel da Bruna um pedido de CANCELAMENTO ou de REMARCAÇÃO, já com todos os dados coletados. ' +
+    'NÃO cancela nem remarca nada: a Bruna finaliza no Minha Agenda e avisa a cliente. ' +
+    'Para remarcar, use só depois de consultar_horarios mostrar o novo horário livre e a cliente confirmar. ' +
+    'Campos que não se aplicam vão como texto vazio.',
   strict: true,
   input_schema: {
     type: 'object',
     properties: {
-      data: { type: 'string', description: 'novo dia, AAAA-MM-DD' },
-      hora: {
+      tipo: { type: 'string', enum: ['cancelar', 'remarcar'] },
+      motivo: {
         type: 'string',
-        description: 'novo horário, HH:MM, exatamente como veio da consulta',
+        description:
+          'por que a cliente quer cancelar/remarcar, resumido (vazio se ela não disse)',
       },
-      profissional: {
+      horario_atual: {
         type: 'string',
-        description: 'primeiro nome da profissional, como veio da consulta',
+        description:
+          'o horário que ela tem marcado (serviço, dia, hora), como ela contou. Só preencha se o contexto NÃO mostrar o agendamento ativo; senão, vazio',
+      },
+      novo_data: {
+        type: 'string',
+        description: 'remarcar: novo dia, AAAA-MM-DD; cancelar: vazio',
+      },
+      novo_hora: {
+        type: 'string',
+        description:
+          'remarcar: novo horário HH:MM, como veio da consulta; cancelar: vazio',
+      },
+      novo_profissional: {
+        type: 'string',
+        description:
+          'remarcar: primeiro nome da profissional, como veio da consulta; cancelar: vazio',
+      },
+      observacao_para_bruna: {
+        type: 'string',
+        description:
+          'qualquer detalhe útil para a Bruna (só ela lê; a cliente não vê). Vazio se não houver',
       },
     },
-    required: ['data', 'hora', 'profissional'],
+    required: [
+      'tipo',
+      'motivo',
+      'horario_atual',
+      'novo_data',
+      'novo_hora',
+      'novo_profissional',
+      'observacao_para_bruna',
+    ],
     additionalProperties: false,
   },
 };
@@ -217,15 +246,80 @@ export interface RepositorioPropostas {
    * dele (ou null se a conversa não tem agendamento ativo).
    */
   marcarCancelamentoPedido(conversaId: string, hoje: string): Promise<string | null>;
-  /**
-   * Grava o agendamento novo (status "agendado", ligado ao antigo) e marca o antigo
-   * como "cancelamento pedido": a Bruna cancela o antigo no Minha Agenda.
-   */
-  registrarRemarcacao(
-    antigo: Proposta,
-    novo: Omit<Proposta, 'id' | 'criadoEm' | 'expiraEm' | 'remarcadoDe'>,
-  ): Promise<Proposta>;
 }
+
+// ---------- pedidos de cancelamento e remarcação (a Bruna finaliza no Minha Agenda) ----------
+
+export interface NovoPedido {
+  conversaId: string;
+  agendamentoId: string | null;
+  tipo: 'cancelar' | 'remarcar' | 'indefinido';
+  horarioAtual: string | null;
+  novoData: string | null;
+  novoHora: string | null;
+  novoProfissional: string | null;
+  motivo: string;
+  /** Só a Bruna lê (painel): detalhes e alertas da IA. */
+  observacao: string;
+}
+
+export interface RepositorioPedidos {
+  /** Grava o pedido e marca como "substituido" qualquer pedido pendente anterior da conversa. */
+  criar(p: NovoPedido): Promise<string>;
+  /** Resumo em uma linha do pedido pendente da conversa, se houver. */
+  resumoPendente(conversaId: string): Promise<string | null>;
+}
+
+const ROTULO_PEDIDO = {
+  cancelar: 'Cancelamento',
+  remarcar: 'Remarcação',
+  indefinido: 'Cancelamento ou remarcação',
+} as const;
+
+export function resumoDoPedido(p: NovoPedido): string {
+  const novo = p.novoData && p.novoHora
+    ? `, para ${dataCurta(p.novoData)} às ${p.novoHora}${
+      p.novoProfissional ? ` com ${p.novoProfissional}` : ''
+    }`
+    : '';
+  return `${ROTULO_PEDIDO[p.tipo]}: ${
+    p.horarioAtual ?? 'horário não identificado'
+  }${novo}`;
+}
+
+/**
+ * A IA passou a conversa para a Bruna por cancelamento/remarcação: garante que existe um
+ * pedido pendente no painel (mesmo que ela não tenha chamado a ferramenta) e devolve o resumo.
+ */
+export async function garantirPedido(
+  pedidos: RepositorioPedidos,
+  propostas:
+    | Pick<RepositorioPropostas, 'agendadoAtivo' | 'marcarCancelamentoPedido'>
+    | undefined,
+  conversaId: string,
+  motivo: string,
+  hoje: string,
+): Promise<string> {
+  const existente = await pedidos.resumoPendente(conversaId);
+  if (existente) return existente;
+  const atual = propostas ? await propostas.agendadoAtivo(conversaId, hoje) : null;
+  const pedido: NovoPedido = {
+    conversaId,
+    agendamentoId: atual?.id ?? null,
+    tipo: 'indefinido',
+    horarioAtual: atual ? resumoDoAgendamento(atual) : null,
+    novoData: null,
+    novoHora: null,
+    novoProfissional: null,
+    motivo: motivo.slice(0, 300),
+    observacao: 'A IA passou para a Bruna sem detalhar o pedido: confira a conversa.',
+  };
+  await pedidos.criar(pedido);
+  if (atual) await propostas!.marcarCancelamentoPedido(conversaId, hoje);
+  return resumoDoPedido(pedido);
+}
+
+/** Resumo de um agendamento em uma linha}
 
 /** Resumo de um agendamento em uma linha, para a IA e para a equipe. */
 export function resumoDoAgendamento(p: Proposta): string {
@@ -313,6 +407,7 @@ export interface DepsFerramentas {
   agendador?: Pick<AgendadorMinhaAgenda, 'agendar'>; // ausente = só consulta
   propostas?: RepositorioPropostas;
   pix?: Pix; // ausente = não propõe agendamento (nada de sinal sem chave Pix)
+  pedidos?: RepositorioPedidos; // ausente = a IA não registra pedidos (só passa para a Bruna)
   avisar: (assunto: string, texto: string) => Promise<void>;
   log: (evento: string, dados?: Record<string, unknown>) => void;
   maxDias: number;
@@ -422,113 +517,121 @@ export function montarFerramentas(
     );
   }
 
-  async function remarcar(e: Record<string, unknown>): Promise<string> {
-    const data = String(e.data ?? '');
-    const hora = String(e.hora ?? '');
-    const prof = String(e.profissional ?? '')
-      .trim()
-      .toLowerCase();
-    const encaminhar =
-      'diga o motivo à cliente, que a Bruna vai ajudar, e marque passar_para_humano = true com intencao = remarcar_ou_cancelar';
-    const atual = await deps.propostas!.agendadoAtivo(
-      ctx.conversaId,
-      hojeSaoPaulo(agora()),
-    );
-    if (!atual) {
-      return `não há agendamento ativo feito por aqui para remarcar: ${encaminhar}`;
+  async function pedido(e: Record<string, unknown>): Promise<string> {
+    const texto = (v: unknown, max: number) => String(v ?? '').trim().slice(0, max);
+    const tipo = texto(e.tipo, 20);
+    if (tipo !== 'cancelar' && tipo !== 'remarcar') {
+      return 'tipo inválido: use cancelar ou remarcar';
     }
-    if (atual.remarcadoDe) {
-      return `esse agendamento já foi remarcado uma vez e só é permitida uma remarcação: ${encaminhar}`;
+    const motivo = texto(e.motivo, 300);
+    const horarioInformado = texto(e.horario_atual, 200);
+    const data = texto(e.novo_data, 10);
+    const hora = texto(e.novo_hora, 5);
+    const prof = texto(e.novo_profissional, 60);
+    const atual = deps.propostas
+      ? await deps.propostas.agendadoAtivo(ctx.conversaId, hojeSaoPaulo(agora()))
+      : null;
+    if (!atual && !horarioInformado) {
+      return 'não achei o agendamento da cliente: pergunte qual serviço, dia e horário ela tem marcado e registre de novo, preenchendo horario_atual';
     }
-    // Horário de Brasília sem horário de verão (UTC-3).
-    const inicio = Date.parse(`${atual.data}T${atual.hora}:00-03:00`);
-    if (inicio - agora().getTime() < 24 * 60 * 60_000) {
-      return `falta menos de 24 horas para o horário atual e a regra do salão exige 24 horas de antecedência para remarcar: ${encaminhar}`;
+    const alertas: string[] = [];
+    if (atual) {
+      // Horário de Brasília sem horário de verão (UTC-3).
+      const inicio = Date.parse(`${atual.data}T${atual.hora}:00-03:00`);
+      if (inicio - agora().getTime() < 24 * 60 * 60_000) {
+        alertas.push('ATENÇÃO: faltam menos de 24 horas para o horário atual.');
+      }
     }
-    if (!HORA_RE.test(hora)) {
-      return 'horário inválido: use HH:MM, como veio da consulta';
+    let novoData: string | null = null;
+    let novoHora: string | null = null;
+    let novoProf: string | null = null;
+    if (tipo === 'remarcar') {
+      if (!data || !HORA_RE.test(hora) || !prof) {
+        return 'faltam dados do novo horário: dia (AAAA-MM-DD), horário (HH:MM) e profissional, como vieram da consulta';
+      }
+      if (atual) {
+        const r = await agendaOuErro(atual.servicoId, data, true);
+        if (typeof r === 'string') return r;
+        const p = r.profissionais.find((x) =>
+          x.nome.toLowerCase() === prof.toLowerCase()
+        );
+        if (!p) {
+          return `profissional não encontrada para esse serviço nessa data. Opções: ${
+            r.profissionais.map((x) => x.nome).join(', ') || 'nenhuma'
+          }`;
+        }
+        if (!p.horarios.includes(hora)) {
+          return `esse horário não está livre com ${p.nome}. ${agendaEmTexto(r)}`;
+        }
+        if (data === atual.data && hora === atual.hora && p.id === atual.profissionalId) {
+          return 'esse já é o horário agendado: pergunte para qual novo dia e horário ela quer remarcar';
+        }
+        novoProf = p.nome;
+        alertas.push(
+          'Novo horário conferido na agenda no momento do pedido: estava livre.',
+        );
+      } else {
+        const erroData = validarData(data, deps.maxDias, agora());
+        if (erroData) return erroData;
+        novoProf = prof;
+        alertas.push(
+          'Novo horário NÃO conferido na agenda (agendamento atual não é do bot).',
+        );
+      }
+      novoData = data;
+      novoHora = hora;
     }
-    if (!telefoneNacional(ctx.waId)) {
-      return `não consigo remarcar para número de fora do Brasil: ${encaminhar}`;
-    }
-    const r = await agendaOuErro(atual.servicoId, data, true);
-    if (typeof r === 'string') return r;
-    const p = r.profissionais.find((x) => x.nome.toLowerCase() === prof);
-    if (!p) {
-      return `profissional não encontrada para esse serviço nessa data. Opções: ${
-        r.profissionais.map((x) => x.nome).join(', ') || 'nenhuma'
-      }`;
-    }
-    if (!p.horarios.includes(hora)) {
-      return `esse horário não está livre com ${p.nome}. ${agendaEmTexto(r)}`;
-    }
-    if (
-      data === atual.data &&
-      hora === atual.hora &&
-      p.id === atual.profissionalId
-    ) {
-      return 'esse já é o horário agendado: pergunte para qual novo dia e horário ela quer remarcar';
+    if (!deps.pedidos) {
+      return 'o registro de pedidos não está disponível: diga que a Bruna vai ajudar, e marque passar_para_humano = true com intencao = remarcar_ou_cancelar';
     }
     try {
-      await deps.agendador!.agendar({
-        nome: atual.nomeCliente,
-        telefone: telefoneNacional(ctx.waId)!,
-        profissionalId: p.id,
-        servicoId: atual.servicoId,
-        data,
-        hora,
-        comentario:
-          'Remarcação feita pelo assistente virtual do WhatsApp (sinal Pix já pago)',
+      await deps.pedidos.criar({
+        conversaId: ctx.conversaId,
+        agendamentoId: atual?.id ?? null,
+        tipo,
+        horarioAtual: atual ? resumoDoAgendamento(atual) : horarioInformado,
+        novoData,
+        novoHora,
+        novoProfissional: novoProf,
+        motivo,
+        observacao: [texto(e.observacao_para_bruna, 500), ...alertas].filter(Boolean)
+          .join(' | '),
       });
+      if (tipo === 'cancelar' && atual) {
+        await deps.propostas!.marcarCancelamentoPedido(
+          ctx.conversaId,
+          hojeSaoPaulo(agora()),
+        );
+      }
     } catch (err) {
-      deps.log('erro_agendamento', {
-        conversa: ctx.conversaId,
-        erro: String(err),
-      });
-      return `o sistema não conseguiu remarcar agora e nada foi alterado: ${encaminhar}`;
+      deps.log('erro_pedido', { conversa: ctx.conversaId, erro: String(err) });
+      return 'não consegui registrar o pedido agora: diga que a Bruna vai ajudar, e marque passar_para_humano = true com intencao = remarcar_ou_cancelar';
     }
-    const novo = await deps.propostas!.registrarRemarcacao(atual, {
-      conversaId: ctx.conversaId,
-      servicoId: atual.servicoId,
-      servicoNome: atual.servicoNome,
-      profissionalId: p.id,
-      profissionalNome: p.nome,
-      data,
-      hora,
-      preco: atual.preco,
-      nomeCliente: atual.nomeCliente,
-    });
-    deps.log('remarcado', { conversa: ctx.conversaId, agendamento: novo.id });
-    try {
-      await deps.avisar(
-        'IA do salão: remarcação pelo WhatsApp',
-        `A cliente remarcou pelo WhatsApp (+${ctx.waId}). O horário NOVO já foi agendado no Minha Agenda:\n\n${
-          resumoDoAgendamento(novo)
-        }\n\n` +
-          `CANCELE o horário antigo no Minha Agenda (ele continua lá até você cancelar):\n\n${
-            resumoDoAgendamento(atual)
-          }\n\n` +
-          `O sinal já pago vale para o novo horário (não foi pedido novo Pix).\n`,
-      );
-    } catch (err) {
-      deps.log('erro_aviso_agendamento', { erro: String(err) });
-    }
-    return `REMARCADO com sucesso: o novo horário é ${
-      resumoDoAgendamento(novo)
-    }. O sinal já pago vale (não peça novo Pix). Diga que a Bruna vai cancelar o horário antigo no sistema e que nada mais é necessário.`;
+    deps.log('pedido_registrado', { conversa: ctx.conversaId, tipo });
+    return `PEDIDO REGISTRADO para a Bruna (${
+      tipo === 'cancelar' ? 'cancelamento' : 'remarcação'
+    }). Ainda NÃO foi ${
+      tipo === 'cancelar' ? 'cancelado' : 'remarcado'
+    }: a Bruna finaliza no sistema e avisa a cliente por aqui. Diga isso com carinho${
+      tipo === 'cancelar'
+        ? ' e lembre, sem prometer devolução nem crédito, que o sinal de 20% não é devolvido em caso de cancelamento (regra da Bruna)'
+        : ' e não diga que já está remarcado'
+    }. Marque passar_para_humano = true e intencao = remarcar_ou_cancelar.`;
   }
 
-  const definicoes = podeAgendar
-    ? [DEF_CONSULTAR, DEF_PROPOR, DEF_REMARCAR]
-    : [DEF_CONSULTAR];
+  const definicoes = [
+    DEF_CONSULTAR,
+    ...(podeAgendar ? [DEF_PROPOR] : []),
+    ...(deps.pedidos ? [DEF_PEDIDO] : []),
+  ];
   return {
     definicoes,
     executar(nome, entrada) {
       deps.log('ferramenta', { nome }); // só o nome, sem dados da cliente
       if (nome === 'consultar_horarios') return consultar(entrada);
       if (podeAgendar && nome === 'propor_agendamento') return propor(entrada);
-      if (podeAgendar && nome === 'remarcar_agendamento') {
-        return remarcar(entrada);
+      if (deps.pedidos && nome === 'registrar_pedido_para_bruna') {
+        return pedido(entrada);
       }
       return Promise.resolve(`ferramenta desconhecida: ${nome}`);
     },
@@ -691,11 +794,7 @@ export async function contextoDoAgendamento(
     partes.push(
       `Agendamento ativo desta cliente (feito pelo sistema): ${
         resumoDoAgendamento(ativo)
-      }. ${
-        ativo.remarcadoDe
-          ? 'Esse agendamento já foi remarcado uma vez (não dá para remarcar de novo: passe para a Bruna). '
-          : 'Se ela pedir para REMARCAR: confirme que é esse horário, pergunte o novo dia e horário, use consultar_horarios e, com o horário livre e a cliente confirmando, chame remarcar_agendamento (o sinal já pago vale, não peça novo Pix; só uma remarcação por agendamento e com 24 horas ou mais de antecedência). '
-      }Se ela pedir para CANCELAR: confirme com ela que é esse horário, explique a política de cancelamento do salão (está nas regras do agendamento) e diga que a Bruna cuida do cancelamento. O sinal NÃO é devolvido em caso de cancelamento (regra da Bruna): diga isso com carinho e clareza, sem prometer devolução nem crédito. Para cancelar, ou se a remarcação for recusada, marque passar_para_humano = true e intencao = remarcar_ou_cancelar, e escreva no "motivo" o pedido dela.`,
+      }. Se ela pedir para CANCELAR ou REMARCAR: confirme com ela que é esse horário, pergunte o motivo sem insistir e, para remarcar, o novo dia e horário (consulte com consultar_horarios e só registre com o horário livre e a cliente confirmando). Você NÃO cancela nem remarca: com tudo em mãos, chame registrar_pedido_para_bruna, e a Bruna finaliza no sistema e avisa a cliente. Explique a política de cancelamento do salão (está nas regras do agendamento). O sinal NÃO é devolvido em caso de cancelamento (regra da Bruna): diga isso com carinho e clareza, sem prometer devolução nem crédito. Depois marque passar_para_humano = true e intencao = remarcar_ou_cancelar, e escreva no "motivo" o pedido dela.`,
     );
   }
   return partes.length ? partes.join('\n') : null;
@@ -714,7 +813,6 @@ function contextoDaProposta(
   }
   if (
     r.status === 'agendado' &&
-    !r.remarcadoDe &&
     agora.getTime() - r.atualizadoEm <= JANELA_AGENDADO_RECENTE_MS
   ) {
     return `O sistema acabou de agendar (${resumo}) depois de receber o comprovante, e a mensagem de confirmação já foi enviada à cliente. Não repita a confirmação nem o resumo e não peça comprovante. Responda só se ela perguntar algo; se a mensagem for apenas um agradecimento ou um aviso de que mandou o comprovante, deixe "resposta" vazia.`;

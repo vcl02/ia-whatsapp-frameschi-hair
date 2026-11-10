@@ -273,6 +273,97 @@ async function carregarConversas() {
   );
 }
 
+// ---------- pedidos de cancelamento e remarcação (a Bruna finaliza) ----------
+const ROTULO_TIPO_PEDIDO = {
+  cancelar: 'Cancelar',
+  remarcar: 'Remarcar',
+  indefinido: 'Cancelar/remarcar',
+};
+
+async function marcarPedido(p, feito) {
+  const { error } = await sb.from('salao_pedidos').update({
+    status: feito ? 'feito' : 'pendente',
+    feito_em: feito ? new Date().toISOString() : null,
+  }).eq('id', p.id);
+  if (error) return alert('Não consegui salvar: ' + error.message);
+  await carregarPedidos();
+}
+
+function linhaDoPedido(p) {
+  const c = Array.isArray(p.salao_conversas) ? p.salao_conversas[0] : p.salao_conversas;
+  const nome = c ? c.nome_cliente || c.nome_perfil || telefone(c.wa_id) : 'Cliente';
+  const feito = p.status === 'feito';
+  const botao = el(
+    'button',
+    { class: feito ? 'btn pequeno' : 'btn ouro' },
+    feito ? 'Desfazer' : 'Feito',
+  );
+  botao.onclick = () => marcarPedido(p, !feito);
+  const novo = p.novo_data && p.novo_hora
+    ? `Novo horário: ${diaDaSemana(p.novo_data)} às ${p.novo_hora}${
+      p.novo_profissional ? ` com ${p.novo_profissional}` : ''
+    }`
+    : null;
+  return el(
+    'div',
+    { class: 'linha' + (feito ? ' feito' : '') },
+    el(
+      'div',
+      { class: 'principal' },
+      el(
+        'div',
+        { class: 'titulo' },
+        el('span', { class: 'selo' }, ROTULO_TIPO_PEDIDO[p.tipo] || p.tipo),
+        nome,
+      ),
+      c ? el('div', { class: 'sub' }, telefone(c.wa_id)) : null,
+      el(
+        'div',
+        { class: 'sub' },
+        `Horário atual: ${p.horario_atual || 'não identificado'}`,
+      ),
+      novo ? el('div', { class: 'sub' }, novo) : null,
+      p.motivo ? el('div', { class: 'sub' }, `Motivo: ${p.motivo}`) : null,
+      p.observacao
+        ? el('div', { class: 'sub obs-ia' }, `Observação da IA: ${p.observacao}`)
+        : null,
+      el(
+        'div',
+        { class: 'sub' },
+        feito ? `Feito em ${quando(p.feito_em)}` : `Pedido em ${quando(p.criado_em)}`,
+      ),
+    ),
+    el('div', { class: 'acoes' }, botao),
+  );
+}
+
+async function carregarPedidos() {
+  const { data, error } = await sb
+    .from('salao_pedidos')
+    .select(
+      'id, tipo, status, horario_atual, novo_data, novo_hora, novo_profissional, motivo, observacao, criado_em, feito_em, salao_conversas(wa_id, nome_perfil, nome_cliente)',
+    )
+    .in('status', ['pendente', 'feito'])
+    .order('criado_em', { ascending: false })
+    .limit(40);
+  if (error) {
+    $('pedidos').replaceChildren(
+      vazio('Não consegui ler. Confira se a migration dos pedidos foi aplicada.'),
+    );
+    return falha(error);
+  }
+  const pendentes = data.filter((p) => p.status === 'pendente');
+  const feitos = data.filter((p) => p.status === 'feito').slice(0, 5);
+  $('pedidosN').textContent = pendentes.length
+    ? `${pendentes.length} ${pendentes.length === 1 ? 'pendente' : 'pendentes'}`
+    : '';
+  $('pedidos').replaceChildren(
+    ...(pendentes.length || feitos.length
+      ? [...pendentes, ...feitos].map(linhaDoPedido)
+      : [vazio('Nenhum pedido pendente.')]),
+  );
+}
+
 // ---------- aprendizados (orientações da equipe para a IA) ----------
 const MAX_APRENDIZADOS = 30; // igual ao teto do prompt (llm.ts)
 const ROTULO_SITUACAO = {
@@ -802,6 +893,7 @@ async function carregar() {
     carregarListas(),
     carregarConfig(),
     carregarAprendizados(),
+    carregarPedidos(),
   ]);
 }
 

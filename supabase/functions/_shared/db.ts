@@ -22,10 +22,13 @@ import {
 } from './llm.ts';
 import type { ArmazemSessao, Sessao } from './disponibilidade.ts';
 import {
+  type NovoPedido,
   type Proposta,
   type PropostaRecente,
+  type RepositorioPedidos,
   type RepositorioPropostas,
   resumoDoAgendamento,
+  resumoDoPedido,
 } from './agendamento.ts';
 import type { PropostaParaLembrete, RepositorioLembretes } from './lembrete.ts';
 
@@ -619,45 +622,6 @@ export class RepositorioPropostasSupabase implements RepositorioPropostas {
     return resumoDoAgendamento(ativo);
   }
 
-  async registrarRemarcacao(
-    antigo: Proposta,
-    novo: Omit<Proposta, 'id' | 'criadoEm' | 'expiraEm' | 'remarcadoDe'>,
-  ): Promise<Proposta> {
-    const agora = new Date().toISOString();
-    const r = checar(
-      await this.db
-        .from('salao_agendamentos')
-        .insert({
-          conversa_id: novo.conversaId,
-          servico_origem_id: novo.servicoId,
-          servico_nome: novo.servicoNome,
-          profissional_id: novo.profissionalId,
-          profissional_nome: novo.profissionalNome,
-          data: novo.data,
-          hora: novo.hora,
-          preco: novo.preco,
-          nome_cliente: novo.nomeCliente,
-          status: 'agendado',
-          detalhe: 'remarcação (sinal do agendamento anterior)',
-          expira_em: agora,
-          remarcado_de: antigo.id,
-        })
-        .select('*')
-        .single(),
-    ) as LinhaAgendamento;
-    checar(
-      await this.db
-        .from('salao_agendamentos')
-        .update({
-          cancelamento_pedido_em: agora,
-          detalhe: 'remarcado: cancelar este horário no Minha Agenda',
-          atualizado_em: agora,
-        })
-        .eq('id', antigo.id),
-    );
-    return paraProposta(r);
-  }
-
   async agendadosDesde(conversaId: string, desde: Date): Promise<number> {
     const { count, error } = await this.db
       .from('salao_agendamentos')
@@ -667,6 +631,71 @@ export class RepositorioPropostasSupabase implements RepositorioPropostas {
       .gte('atualizado_em', desde.toISOString());
     if (error) throw error;
     return count ?? 0;
+  }
+}
+
+/** Pedidos de cancelamento e remarcação para a Bruna finalizar (tabela salao_pedidos). */
+export class RepositorioPedidosSupabase implements RepositorioPedidos {
+  constructor(private db: SupabaseClient) {}
+
+  async criar(p: NovoPedido): Promise<string> {
+    checar(
+      await this.db
+        .from('salao_pedidos')
+        .update({ status: 'substituido' })
+        .eq('conversa_id', p.conversaId)
+        .eq('status', 'pendente'),
+    );
+    const r = checar(
+      await this.db
+        .from('salao_pedidos')
+        .insert({
+          conversa_id: p.conversaId,
+          agendamento_id: p.agendamentoId,
+          tipo: p.tipo,
+          horario_atual: p.horarioAtual,
+          novo_data: p.novoData,
+          novo_hora: p.novoHora,
+          novo_profissional: p.novoProfissional,
+          motivo: p.motivo,
+          observacao: p.observacao,
+        })
+        .select('id')
+        .single(),
+    ) as { id: string };
+    return r.id;
+  }
+
+  async resumoPendente(conversaId: string): Promise<string | null> {
+    const r = checar(
+      await this.db
+        .from('salao_pedidos')
+        .select(
+          'tipo, horario_atual, novo_data, novo_hora, novo_profissional',
+        )
+        .eq('conversa_id', conversaId)
+        .eq('status', 'pendente')
+        .order('criado_em', { ascending: false })
+        .limit(1),
+    ) as Array<{
+      tipo: NovoPedido['tipo'];
+      horario_atual: string | null;
+      novo_data: string | null;
+      novo_hora: string | null;
+      novo_profissional: string | null;
+    }>;
+    if (!r[0]) return null;
+    return resumoDoPedido({
+      conversaId,
+      agendamentoId: null,
+      tipo: r[0].tipo,
+      horarioAtual: r[0].horario_atual,
+      novoData: r[0].novo_data,
+      novoHora: r[0].novo_hora,
+      novoProfissional: r[0].novo_profissional,
+      motivo: '',
+      observacao: '',
+    });
   }
 }
 

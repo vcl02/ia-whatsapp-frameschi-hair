@@ -255,3 +255,22 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
   `erro` e o `motivo_humano` seguem sem leitura pela equipe.
 - A política de privacidade já diz que a equipe recebe as conversas passadas para ela;
   vale conferir o texto antes de atender clientes reais.
+
+## 2026-11-09 — Cancelamento e remarcação: a IA coleta, a Bruna finaliza
+
+- A IA não remarca mais no Minha Agenda (a ferramenta `remarcar_agendamento` foi removida,
+  junto com `registrarRemarcacao`). Nem cancela. Ela reúne os dados (horário atual, motivo
+  e, na remarcação, o novo horário conferido na agenda) e chama
+  `registrar_pedido_para_bruna`.
+- O pedido vai para a tabela `salao_pedidos` (migration `20261111030000`) e aparece no
+  painel, em "Pedidos para a Bruna". A Bruna finaliza no Minha Agenda, clica em **Feito**
+  e avisa a cliente no WhatsApp. O painel não envia mensagem.
+- A "Observação da IA" (alertas como "faltam menos de 24 h", "horário novo não conferido")
+  só aparece no painel e nunca vai para a cliente.
+- Se a IA passar para a Bruna por cancelamento/remarcação sem registrar o pedido, o código
+  cria um pedido "indefinido" mesmo assim (`garantirPedido`), para nada ficar só no
+  e-mail.
+- Um pedido novo da mesma conversa substitui o pendente anterior.
+- As regras antigas (24 h de antecedência, uma remarcação por agendamento) deixaram de ser
+  aplicadas pelo código: a Bruna decide. O pedido sai com alerta quando faltam menos de 24
+  h.

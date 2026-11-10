@@ -546,6 +546,12 @@
       color: var(--gold);
       margin-right: 6px;
     }
+    .linha.feito {
+      opacity: 0.55;
+    }
+    .sub.obs-ia {
+      color: var(--gold);
+    }
     .linha.desligada .titulo {
       opacity: 0.5;
       text-decoration: line-through;
@@ -787,6 +793,13 @@
 
     <main id="app" class="oculto">
       <section class="numeros" id="numeros"></section>
+
+      <section class="card" id="cardPedidos">
+        <h2>Pedidos para a Bruna <span id="pedidosN" class="contagem aviso"></span></h2>
+        <p
+          class="sub">Cancelamentos e remarcações que a IA já coletou. Finalize no Minha Agenda, marque como feito e avise a cliente no WhatsApp.</p>
+        <div id="pedidos" class="lista"></div>
+      </section>
 
       <section class="card">
         <h2><svg id="avisoConversas" class="aviso-icone oculto" viewBox="0 0 24 24" role="img" aria-label="Conversas esperando por você"><title>Conversas esperando por você</title><path d="M12 3.5 22 20.5H2L12 3.5z" /><path d="M12 10v4.5" /><path d="M12 17.6h.01" /></svg>Conversas <span id="conversasN" class="contagem"></span><span id="ativasN" class="contagem ok"></span><span id="pausadasN" class="contagem aviso"></span></h2>
