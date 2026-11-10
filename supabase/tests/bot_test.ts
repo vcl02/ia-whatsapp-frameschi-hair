@@ -8,7 +8,12 @@ import {
   processarMensagem,
   type Repositorio,
 } from '../functions/_shared/bot.ts';
-import type { Atendente, DecisaoLLM, ItemHistorico } from '../functions/_shared/llm.ts';
+import type {
+  Aprendizado,
+  Atendente,
+  DecisaoLLM,
+  ItemHistorico,
+} from '../functions/_shared/llm.ts';
 import type { MensagemRecebida, ResultadoEnvio } from '../functions/_shared/whatsapp.ts';
 import { type DadosSalao, SALAO, type Servico } from '../functions/_shared/salao.ts';
 import { SERVICOS_TESTE } from './salao_teste.ts';
@@ -50,6 +55,13 @@ class RepoFake implements Repositorio {
   temSaida() {
     return Promise.resolve(this.jaRespondeu);
   }
+  aprendizadosLista: Aprendizado[] = [];
+  aprendizadosFalha = false;
+  aprendizados(_c: string): Promise<Aprendizado[]> {
+    return this.aprendizadosFalha
+      ? Promise.reject(new Error('banco fora'))
+      : Promise.resolve(this.aprendizadosLista);
+  }
   servicosAtivos() {
     return Promise.resolve(this.servicos);
   }
@@ -86,9 +98,11 @@ function montar(decisao: DecisaoLLM | Error) {
   const avisos: string[] = [];
   let chamadasLLM = 0;
   const salaoRecebido: { valor?: DadosSalao } = {};
+  const aprendizadosRecebidos: { valor?: Aprendizado[] } = {};
   const atendente: Atendente = {
-    responder: (_h, _s, salao) => {
+    responder: (_h, _s, salao, opcoes) => {
       salaoRecebido.valor = salao;
+      aprendizadosRecebidos.valor = opcoes?.aprendizados;
       chamadasLLM++;
       if (repo.pausarDuranteLLM) repo.c.botPausado = true;
       if (repo.novaDuranteLLM) repo.ultima = 'wamid.nova';
@@ -113,7 +127,15 @@ function montar(decisao: DecisaoLLM | Error) {
     aleatorio: () => 0,
     log: () => {},
   };
-  return { repo, deps, enviados, avisos, salaoRecebido, llm: () => chamadasLLM };
+  return {
+    repo,
+    deps,
+    enviados,
+    avisos,
+    salaoRecebido,
+    aprendizadosRecebidos,
+    llm: () => chamadasLLM,
+  };
 }
 
 const ok: DecisaoLLM = {
@@ -562,4 +584,16 @@ Deno.test('pedido de atendente vai direto: sem esperar e sem chamar a IA', async
   assertEquals(esperou, false);
   assertEquals(t.llm(), 0);
   assertEquals(t.repo.humano, 'cliente pediu atendimento humano');
+});
+
+Deno.test('aprendizados da equipe chegam à IA; se o banco falhar, responde sem eles', async () => {
+  const t = montar(ok);
+  t.repo.aprendizadosLista = [{ escopo: 'geral', texto: 'Não prometa encaixe.' }];
+  assertEquals(await processarMensagem(t.deps, 'c1', msg()), 'respondido');
+  assertEquals(t.aprendizadosRecebidos.valor, t.repo.aprendizadosLista);
+
+  const f = montar(ok);
+  f.repo.aprendizadosFalha = true;
+  assertEquals(await processarMensagem(f.deps, 'c1', msg()), 'respondido');
+  assertEquals(f.aprendizadosRecebidos.valor, []);
 });

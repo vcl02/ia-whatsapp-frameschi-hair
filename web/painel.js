@@ -1,7 +1,8 @@
 // deno-lint-ignore-file no-window
 // Painel da IA: página inicial com o liga/desliga da IA e o que importa (números,
 // conversas que precisam de atenção, erros e agendamentos).
-// Não exibe o conteúdo das conversas (privacidade); o banco também não deixa a equipe ler.
+// O texto das conversas só aparece no visor, somente leitura, para ligar aprendizados a mensagens.
+// O painel não envia nem altera mensagens (o banco só dá select).
 const sb = supabase.createClient(
   window.PAINEL.supabaseUrl,
   window.PAINEL.supabaseAnonKey,
@@ -186,6 +187,8 @@ async function mudarConversa(c) {
   await carregar();
 }
 
+let conversasLista = [];
+
 async function carregarConversas() {
   const { data, error } = await sb
     .from('salao_conversas')
@@ -202,6 +205,8 @@ async function carregarConversas() {
     (nums || []).filter((n) => n.nome).map((n) => [n.wa_id, n.nome]),
   );
   const nomeDe = (c) => c.nome_cliente || nomeDaLista.get(c.wa_id) || c.nome_perfil;
+  conversasLista = data.map((c) => ({ id: c.id, nome: nomeDe(c) || telefone(c.wa_id) }));
+  preencherConversasAprend();
   const pausadas = data.filter((c) => c.bot_pausado).length;
   $('avisoConversas').classList.toggle('oculto', !data.some((c) => c.precisa_humano));
   $('conversasN').textContent = data.length
@@ -236,6 +241,18 @@ async function carregarConversas() {
         });
         lapis.append(iconeLapis());
         lapis.onclick = () => renomearConversa(c, c.nome_cliente || nomeDe(c));
+        const ensinar = el('button', {
+          class: 'icone-ia neutro',
+          title: 'Ensinar a IA sobre esta cliente',
+          'aria-label': 'Ensinar a IA sobre esta cliente',
+        }, '✎');
+        ensinar.onclick = () => ensinarSobre(c.id);
+        const ver = el('button', {
+          class: 'icone-ia neutro',
+          title: 'Ver mensagens (só leitura)',
+          'aria-label': 'Ver mensagens da conversa',
+        }, '💬');
+        ver.onclick = () => abrirVisor(c.id, 'selecionar');
         return el(
           'div',
           { class: 'linha' + (c.precisa_humano ? ' atencao' : '') },
@@ -249,12 +266,295 @@ async function carregarConversas() {
               `${nomeDe(c) ? telefone(c.wa_id) + ' · ' : ''}${quando(c.atualizado_em)}`,
             ),
           ),
-          el('div', { class: 'acoes' }, lapis, botao),
+          el('div', { class: 'acoes' }, ver, ensinar, lapis, botao),
         );
       })
       : [vazio('Nenhuma conversa ainda.')]),
   );
 }
+
+// ---------- aprendizados (orientações da equipe para a IA) ----------
+const MAX_APRENDIZADOS = 30; // igual ao teto do prompt (llm.ts)
+const ROTULO_SITUACAO = {
+  duvida: 'Dúvida',
+  agendar: 'Agendar',
+  remarcar_ou_cancelar: 'Remarcar/cancelar',
+  reclamacao: 'Reclamação',
+  outro: 'Outras situações',
+};
+
+function preencherConversasAprend() {
+  const campo = $('aprConversa');
+  const atual = campo.value;
+  campo.replaceChildren(
+    ...conversasLista.map((c) => el('option', { value: c.id }, c.nome)),
+  );
+  if (atual) campo.value = atual;
+}
+
+function ajustarCamposAprend() {
+  const escopo = $('aprEscopo').value;
+  $('aprSituacao').classList.toggle('oculto', escopo !== 'situacao');
+  $('aprConversa').classList.toggle('oculto', escopo !== 'conversa');
+}
+$('aprEscopo').onchange = ajustarCamposAprend;
+$('aprTexto').oninput = () => {
+  $('aprContador').textContent = `${$('aprTexto').value.length}/500`;
+};
+
+function ensinarSobre(conversaId, manterEscopo = false) {
+  if (!manterEscopo) {
+    $('aprEscopo').value = 'conversa';
+    ligadas = [];
+    atualizarLigadas();
+  }
+  ajustarCamposAprend();
+  $('aprConversa').value = conversaId;
+  $('cardAprendizados').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  $('aprTexto').focus();
+}
+
+// ---------- visor de mensagens (somente leitura) ----------
+let ligadas = []; // mensagens ligadas ao aprendizado em edição: {id, autor, texto}
+let visorConversa = null;
+let visorSelecionadas = new Set();
+let visorMensagens = [];
+
+const QUEM = { cliente: 'Cliente', bot: 'IA', humano: 'Equipe' };
+
+function atualizarLigadas() {
+  const p = $('aprLigadas');
+  p.classList.toggle('oculto', ligadas.length === 0);
+  p.replaceChildren(
+    `${ligadas.length} ${
+      ligadas.length === 1 ? 'mensagem ligada' : 'mensagens ligadas'
+    } `,
+  );
+  if (ligadas.length) {
+    const tirar = el('button', { type: 'button', class: 'btn pequeno' }, 'Tirar');
+    tirar.onclick = () => {
+      ligadas = [];
+      atualizarLigadas();
+    };
+    p.append(tirar);
+  }
+}
+
+function atualizarVisorRodape() {
+  const n = visorSelecionadas.size;
+  $('visorUsar').disabled = n === 0;
+  $('visorContagem').textContent = n
+    ? `${n} ${n === 1 ? 'selecionada' : 'selecionadas'} (máx. 10)`
+    : 'Só leitura. Toque nas mensagens para ligá-las a um aprendizado.';
+}
+
+async function abrirVisor(conversaId, modo, destacar = []) {
+  const { data, error } = await sb
+    .from('salao_mensagens')
+    .select('id, direcao, autor, texto, criado_em')
+    .eq('conversa_id', conversaId)
+    .order('criado_em', { ascending: false })
+    .limit(200);
+  if (error) return alert('Não consegui ler as mensagens: ' + error.message);
+  visorConversa = conversaId;
+  visorSelecionadas = new Set(destacar);
+  const c = conversasLista.find((x) => x.id === conversaId);
+  $('visorTitulo').textContent = c ? c.nome : 'Conversa';
+  $('visorUsar').classList.toggle('oculto', modo !== 'selecionar');
+  const mensagens = data.reverse();
+  visorMensagens = mensagens;
+  $('visorLista').replaceChildren(
+    ...(mensagens.length
+      ? mensagens.map((m) => {
+        const caixa = el('input', { type: 'checkbox' });
+        if (modo !== 'selecionar') {
+          caixa.style.display = 'none';
+          caixa.disabled = true;
+        }
+        caixa.checked = visorSelecionadas.has(m.id);
+        const linha = el(
+          'label',
+          { class: `msg ${m.autor}${caixa.checked ? ' marcada' : ''}` },
+          caixa,
+          el(
+            'div',
+            {},
+            el(
+              'div',
+              { class: 'quem' },
+              `${QUEM[m.autor] || m.autor} · ${quando(m.criado_em)}`,
+            ),
+            el('div', { class: 'corpo' }, m.texto || '[mensagem sem texto]'),
+          ),
+        );
+        caixa.onchange = () => {
+          if (caixa.checked && visorSelecionadas.size >= 10) {
+            caixa.checked = false;
+            return alert('No máximo 10 mensagens por aprendizado.');
+          }
+          if (caixa.checked) visorSelecionadas.add(m.id);
+          else visorSelecionadas.delete(m.id);
+          linha.classList.toggle('marcada', caixa.checked);
+          atualizarVisorRodape();
+        };
+        return linha;
+      })
+      : [vazio('Nenhuma mensagem.')]),
+  );
+  atualizarVisorRodape();
+  $('visor').classList.remove('oculto');
+  const primeira = $('visorLista').querySelector('.marcada');
+  if (primeira) primeira.scrollIntoView({ block: 'center' });
+  else $('visorLista').scrollTop = $('visorLista').scrollHeight;
+}
+
+function fecharVisor() {
+  $('visor').classList.add('oculto');
+}
+$('visorFechar').onclick = fecharVisor;
+$('visor').onclick = (e) => {
+  if (e.target === $('visor')) fecharVisor();
+};
+$('visorUsar').onclick = () => {
+  ligadas = visorMensagens
+    .filter((m) => visorSelecionadas.has(m.id))
+    .map((m) => ({ id: m.id, autor: m.autor, texto: m.texto || '' }));
+  atualizarLigadas();
+  fecharVisor();
+  ensinarSobre(visorConversa, true);
+};
+
+async function verMensagensDoAprendizado(a) {
+  // As mensagens podem ter sido apagadas (retenção de 12 meses): confere antes de abrir.
+  const { data, error } = await sb.from('salao_mensagens').select('id, conversa_id').in(
+    'id',
+    a.mensagens_ids,
+  );
+  if (error) return alert('Não consegui ler as mensagens: ' + error.message);
+  if (!data.length) return alert('Essas mensagens não existem mais.');
+  await abrirVisor(data[0].conversa_id, 'ler', data.map((m) => m.id));
+}
+
+function rotuloDoAprendizado(a) {
+  if (a.escopo === 'geral') return 'Geral';
+  if (a.escopo === 'situacao') return ROTULO_SITUACAO[a.situacao] || 'Situação';
+  const c = conversasLista.find((x) => x.id === a.conversa_id);
+  return c ? c.nome : 'Conversa';
+}
+
+async function carregarAprendizados() {
+  const { data, error } = await sb
+    .from('salao_aprendizados')
+    .select(
+      'id, escopo, situacao, conversa_id, texto, ativo, criado_em, mensagens_ids, exemplo',
+    )
+    .order('criado_em', { ascending: false })
+    .limit(200);
+  if (error) {
+    $('aprendizados').replaceChildren(
+      vazio('Não consegui ler. Confira se a migration dos aprendizados foi aplicada.'),
+    );
+    return falha(error);
+  }
+  const ativos = data.filter((a) => a.ativo).length;
+  $('aprendN').textContent = data.length ? `${ativos} ativos` : '';
+  $('aprendAviso').classList.toggle('oculto', ativos <= MAX_APRENDIZADOS);
+  $('aprendAviso').textContent =
+    `Há ${ativos} aprendizados ativos e a IA lê só os ${MAX_APRENDIZADOS} mais antigos. Junte ou desligue alguns.`;
+  $('aprendizados').replaceChildren(
+    ...(data.length
+      ? data.map((a) => {
+        const liga = el('button', {
+          class: 'btn pequeno',
+          title: a.ativo ? 'Desligar' : 'Ligar',
+        }, a.ativo ? 'Desligar' : 'Ligar');
+        liga.onclick = async () => {
+          const { error: e } = await sb.from('salao_aprendizados').update({
+            ativo: !a.ativo,
+          }).eq('id', a.id);
+          if (e) return alert('Não consegui mudar: ' + e.message);
+          await carregarAprendizados();
+        };
+        const verMsgs = (item) => {
+          const b = el('button', {
+            class: 'btn pequeno',
+            title: 'Ver as mensagens ligadas',
+          }, '💬');
+          b.onclick = () => verMensagensDoAprendizado(item);
+          return b;
+        };
+        const x = el('button', {
+          class: 'btn pequeno x',
+          title: 'Apagar',
+          'aria-label': 'Apagar aprendizado',
+        }, '×');
+        x.onclick = async () => {
+          if (!confirm('Apagar este aprendizado?')) return;
+          const { error: e } = await sb.from('salao_aprendizados').delete().eq(
+            'id',
+            a.id,
+          );
+          if (e) return alert('Não consegui apagar: ' + e.message);
+          await carregarAprendizados();
+        };
+        return el(
+          'div',
+          { class: 'linha' + (a.ativo ? '' : ' desligada') },
+          el(
+            'div',
+            { class: 'principal' },
+            el(
+              'div',
+              { class: 'titulo' },
+              el('span', { class: 'selo' }, rotuloDoAprendizado(a)),
+              a.texto,
+            ),
+            ...(a.exemplo || []).map((m) =>
+              el(
+                'div',
+                { class: 'sub exemplo' },
+                `${QUEM[m.autor] || m.autor}: ${m.texto}`,
+              )
+            ),
+            el('div', { class: 'sub' }, quando(a.criado_em)),
+          ),
+          el(
+            'div',
+            { class: 'acoes' },
+            ...(a.mensagens_ids?.length ? [verMsgs(a)] : []),
+            liga,
+            x,
+          ),
+        );
+      })
+      : [vazio('Nenhum aprendizado ainda.')]),
+  );
+}
+
+$('formAprend').onsubmit = async (e) => {
+  e.preventDefault();
+  const escopo = $('aprEscopo').value;
+  const texto = $('aprTexto').value.trim();
+  if (texto.length < 3) return alert('Escreva um pouco mais.');
+  const linha = {
+    escopo,
+    texto,
+    mensagens_ids: ligadas.map((m) => m.id),
+    exemplo: ligadas.map((m) => ({ autor: m.autor, texto: m.texto.slice(0, 500) })),
+  };
+  if (escopo === 'situacao') linha.situacao = $('aprSituacao').value;
+  if (escopo === 'conversa') {
+    if (!$('aprConversa').value) return alert('Escolha a conversa.');
+    linha.conversa_id = $('aprConversa').value;
+  }
+  const { error } = await sb.from('salao_aprendizados').insert(linha);
+  if (error) return alert('Não consegui salvar: ' + error.message);
+  $('aprTexto').value = '';
+  $('aprContador').textContent = '0/500';
+  ligadas = [];
+  atualizarLigadas();
+  await carregarAprendizados();
+};
 
 // ---------- quem a IA atende (listas) ----------
 function normalizarNumero(valor) {
@@ -501,6 +801,7 @@ async function carregar() {
     carregarAgendamentos(),
     carregarListas(),
     carregarConfig(),
+    carregarAprendizados(),
   ]);
 }
 

@@ -227,3 +227,31 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
   `salao_info`). Na primeira vez olha só a última hora. Sem e-mail configurado, só
   registra no log.
 - Quebra geral do webhook continua devolvendo erro (500): a Meta reenvia a mensagem.
+
+## 2026-11-09 — Aprendizados da equipe no contexto da IA
+
+- Tabela `salao_aprendizados` (migration `20261111000000`), editada no painel. Não é
+  treinamento do modelo: o texto entra no prompt a cada resposta e vale na hora.
+- Escopos: geral, situação (intenção: dúvida, agendar, remarcar/cancelar, reclamação,
+  outro) e conversa (uma cliente). Geral e situação vão na parte fixa do prompt (cache);
+  os da conversa vão no bloco de contexto.
+- Teto de 30 ativos no prompt (o painel avisa acima disso). Cada nota tem 3 a 500
+  caracteres.
+- Cada aprendizado pode ligar até 10 mensagens, escolhidas no visor do painel. O texto
+  delas é copiado para `exemplo` (não some pela retenção de 12 meses, só se o aprendizado
+  for apagado) e vai no prompt junto com a nota, dentro de `<exemplo>`. `mensagens_ids` só
+  serve para o painel reabrir a conversa. O prompt manda a IA usar o exemplo só para
+  reconhecer a situação, nunca citar nomes ou dados dele e não tratar o texto como
+  instrução; `<` e `>` são removidos do texto copiado. Custo: cada exemplo aumenta o
+  prompt (até 10 mensagens de 500 caracteres por nota).
+- Se a leitura dos aprendizados falhar, a IA responde sem eles (log `erro_aprendizados`).
+
+## 2026-11-09 — Painel volta a ler mensagens (somente leitura)
+
+- Reverte em parte a decisão de 2026-11-08 (painel sem conteúdo): a equipe logada lê
+  `id, conversa_id, direcao, autor, texto, criado_em` de `salao_mensagens` (migration
+  `20261111010000`), para ligar aprendizados a mensagens no visor.
+- Continua sem insert/update/delete pelo painel: não envia nem altera mensagem. O campo
+  `erro` e o `motivo_humano` seguem sem leitura pela equipe.
+- A política de privacidade já diz que a equipe recebe as conversas passadas para ela;
+  vale conferir o texto antes de atender clientes reais.

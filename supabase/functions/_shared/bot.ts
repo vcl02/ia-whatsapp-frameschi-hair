@@ -8,7 +8,7 @@ import {
   type DadosSalao,
   type Servico,
 } from './salao.ts';
-import type { Atendente, ConfigIA, ItemHistorico } from './llm.ts';
+import type { Aprendizado, Atendente, ConfigIA, ItemHistorico } from './llm.ts';
 import type {
   ContextoConversa,
   Ferramentas,
@@ -30,6 +30,8 @@ export interface Repositorio {
   ultimaEntradaWamid(conversaId: string): Promise<string | null>;
   temSaida(conversaId: string): Promise<boolean>;
   servicosAtivos(): Promise<Servico[]>;
+  /** Orientações ativas da equipe: gerais, de situação e as desta conversa. */
+  aprendizados(conversaId: string): Promise<Aprendizado[]>;
   /** Horário e regras espelhados do Minha Agenda (tabela salao_info). */
   infoSalao(): Promise<Record<string, string>>;
   /** Quantas respostas o bot mandou desde `desde` (na conversa, ou em todas se conversaId = null). */
@@ -315,7 +317,13 @@ export async function processarMensagem(
     const contextoAgendamento = await deps
       .contextoAgendamento?.(c.id)
       .catch(() => null);
+    // Sem os aprendizados a IA ainda atende; não derruba a resposta por causa deles.
+    const aprendizados = await deps.repo.aprendizados(c.id).catch((e) => {
+      deps.log('erro_aprendizados', { conversa: c.id, erro: String(e) });
+      return [];
+    });
     decisao = await deps.atendente.responder(historico, servicos, salao, {
+      aprendizados,
       ferramentas: deps.ferramentas?.({
         conversaId: c.id,
         waId: c.waId,

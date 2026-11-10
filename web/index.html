@@ -420,6 +420,136 @@
       font-size: 13px;
       color: var(--muted);
     }
+    .visor {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      background: rgba(0, 0, 0, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+    }
+    .visor-caixa {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      width: min(560px, 100%);
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .visor-topo,
+    .visor-rodape {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 12px 16px;
+    }
+    .visor-topo {
+      border-bottom: 1px solid var(--line);
+    }
+    .visor-rodape {
+      border-top: 1px solid var(--line);
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .visor-lista {
+      overflow-y: auto;
+      padding: 12px 16px;
+      display: grid;
+      gap: 8px;
+    }
+    .msg {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px;
+      align-items: start;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      background: var(--surface-2);
+      cursor: pointer;
+    }
+    .msg.bot {
+      background: var(--gold-soft);
+    }
+    .msg.humano {
+      background: var(--ok-soft);
+    }
+    .msg.marcada {
+      border-color: var(--gold);
+    }
+    .msg .quem {
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .msg .corpo {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .sub.exemplo {
+      border-left: 2px solid var(--gold);
+      padding-left: 8px;
+      margin-top: 4px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .ligadas {
+      font-size: 13px;
+      color: var(--gold);
+    }
+    textarea {
+      font: inherit;
+      color: var(--fg);
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      width: 100%;
+      resize: vertical;
+      min-height: 72px;
+    }
+    textarea:focus-visible {
+      outline: 2px solid var(--gold);
+      outline-offset: 2px;
+    }
+    .aprend-form {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .aprend-form .linha-campos {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .aprend-form .rodape {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .aprend-aviso {
+      font-size: 13px;
+      color: var(--warn);
+      margin-top: 8px;
+    }
+    .selo {
+      display: inline-block;
+      font-size: 11px;
+      padding: 1px 8px;
+      border-radius: 999px;
+      background: var(--gold-soft);
+      color: var(--gold);
+      margin-right: 6px;
+    }
+    .linha.desligada .titulo {
+      opacity: 0.5;
+      text-decoration: line-through;
+    }
     select {
       font: inherit;
       color: var(--fg);
@@ -673,6 +803,37 @@
         <div id="agendamentos" class="lista"></div>
       </section>
 
+      <section class="card" id="cardAprendizados">
+        <h2>Aprendizados da IA <span id="aprendN" class="contagem"></span></h2>
+        <p class="sub">Orientações suas que a IA lê em toda resposta. Vale na hora.</p>
+        <div id="aprendizados" class="lista"></div>
+        <p id="aprendAviso" class="aprend-aviso oculto"></p>
+        <form id="formAprend" class="aprend-form">
+          <div class="linha-campos">
+            <select id="aprEscopo" aria-label="Quando vale">
+              <option value="geral">Em qualquer conversa</option>
+              <option value="situacao">Numa situação</option>
+              <option value="conversa">Numa conversa</option>
+            </select>
+            <select id="aprSituacao" class="oculto" aria-label="Situação">
+              <option value="duvida">Cliente com dúvida</option>
+              <option value="agendar">Cliente quer agendar</option>
+              <option value="remarcar_ou_cancelar">Remarcar ou cancelar</option>
+              <option value="reclamacao">Reclamação</option>
+              <option value="outro">Outras situações</option>
+            </select>
+            <select id="aprConversa" class="oculto" aria-label="Conversa"></select>
+          </div>
+          <p id="aprLigadas" class="ligadas oculto"></p>
+          <textarea id="aprTexto" maxlength="500" required
+            placeholder="Ex.: nunca prometa encaixe; quem decide é a Bruna."></textarea>
+          <div class="rodape">
+            <span id="aprContador">0/500</span>
+            <button class="btn ouro">Salvar aprendizado</button>
+          </div>
+        </form>
+      </section>
+
       <section class="card tecnico">
         <p id="modoLista" class="modo oculto"></p>
         <div class="listas">
@@ -727,6 +888,22 @@
         </div>
       </section>
     </main>
+
+    <div id="visor" class="visor oculto" role="dialog" aria-modal="true"
+      aria-label="Mensagens da conversa">
+      <div class="visor-caixa">
+        <div class="visor-topo">
+          <strong id="visorTitulo"></strong>
+          <button id="visorFechar" class="btn pequeno" aria-label="Fechar">Fechar</button>
+        </div>
+        <div id="visorLista" class="visor-lista"></div>
+        <div class="visor-rodape">
+          <span
+            id="visorContagem">Só leitura. Toque nas mensagens para ligá-las a um aprendizado.</span>
+          <button id="visorUsar" class="btn ouro" disabled>Ensinar com estas</button>
+        </div>
+      </div>
+    </div>
 
     <script
       src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"

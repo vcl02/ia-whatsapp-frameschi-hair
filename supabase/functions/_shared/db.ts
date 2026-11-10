@@ -11,11 +11,13 @@ import type {
 import type { Servico } from './salao.ts';
 import type { Conversa, Repositorio } from './bot.ts';
 import {
+  type Aprendizado,
   CONFIG_PADRAO,
   type ConfigIA,
   type Esforco,
   ESFORCOS_PERMITIDOS,
   type ItemHistorico,
+  MAX_APRENDIZADOS,
   MODELOS_PERMITIDOS,
 } from './llm.ts';
 import type { ArmazemSessao, Sessao } from './disponibilidade.ts';
@@ -336,6 +338,18 @@ export class RepositorioSupabase implements Repositorio {
         .limit(1),
     ) as { wamid: string | null }[];
     return r[0]?.wamid ?? null;
+  }
+
+  async aprendizados(conversaId: string): Promise<Aprendizado[]> {
+    return checar(
+      await this.db
+        .from('salao_aprendizados')
+        .select('escopo, situacao, texto, exemplo')
+        .eq('ativo', true)
+        .or(`conversa_id.is.null,conversa_id.eq.${conversaId}`)
+        .order('criado_em', { ascending: true })
+        .limit(MAX_APRENDIZADOS),
+    ) as Aprendizado[];
   }
 
   async historico(

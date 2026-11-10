@@ -48,7 +48,14 @@ export class AtendenteClaude implements Atendente {
     salao: DadosSalao,
     opcoes: OpcoesResposta = {},
   ): Promise<DecisaoLLM> {
-    const { ferramentas, nomeCliente, modelo, esforco, contextoAgendamento } = opcoes;
+    const {
+      ferramentas,
+      nomeCliente,
+      modelo,
+      esforco,
+      contextoAgendamento,
+      aprendizados,
+    } = opcoes;
     const messages: Anthropic.Beta.Messages.BetaMessageParam[] = montarMensagens(
       historico,
     );
@@ -59,12 +66,17 @@ export class AtendenteClaude implements Atendente {
     const system: Anthropic.Beta.Messages.BetaTextBlockParam[] = [
       {
         type: 'text',
-        text: montarSistema(salao, servicos),
+        text: montarSistema(salao, servicos, aprendizados),
         cache_control: { type: 'ephemeral' },
       },
       {
         type: 'text',
-        text: blocoContexto(this.relogio(), nomeCliente, contextoAgendamento),
+        text: blocoContexto(
+          this.relogio(),
+          nomeCliente,
+          contextoAgendamento,
+          aprendizados,
+        ),
       },
     ];
     const uso: UsoTokens = { entrada: 0, saida: 0, cache: 0 };
