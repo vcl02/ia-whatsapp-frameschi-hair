@@ -4,6 +4,7 @@ import {
   type DepsBot,
   LIMITE_GLOBAL_DIA,
   LIMITE_POR_CONVERSA_HORA,
+  pedeHumano,
   processarMensagem,
   type Repositorio,
 } from '../functions/_shared/bot.ts';
@@ -513,4 +514,52 @@ Deno.test('chegou mensagem nova enquanto a LLM respondia: descarta a resposta ve
   assertEquals(t.llm(), 1);
   assertEquals(t.enviados.length, 0);
   assertEquals(t.repo.humano, null);
+});
+
+Deno.test('pedeHumano: pega variações de "quero a Bruna" e ignora "cabelo humano"', () => {
+  for (
+    const t of [
+      'atendente',
+      'Humano',
+      'Sair',
+      'sair!',
+      'Atendente.',
+      'humano por favor',
+      'Quero falar com uma ATENDENTE',
+      'me passa pra Bruna',
+      'chama a Bruna por favor',
+      'cadê a bruna?',
+      'quero falar com alguém',
+      'preciso falar com a dona',
+      'quero atendimento humano',
+      'quero uma pessoa de verdade',
+      'falar com o responsável',
+    ]
+  ) assertEquals(pedeHumano(t), true, t);
+  for (
+    const t of [
+      'vocês fazem alongamento com cabelo humano?',
+      'quanto custa a escova?',
+      'a Bruna atende terça?',
+      'oi tudo bem',
+      'oi Bruna',
+      'cabelo humano',
+    ]
+  ) assertEquals(pedeHumano(t), false, t);
+});
+
+Deno.test('pedido de atendente vai direto: sem esperar e sem chamar a IA', async () => {
+  const t = montar(ok);
+  let esperou = false;
+  t.deps.esperar = () => {
+    esperou = true;
+    return Promise.resolve();
+  };
+  assertEquals(
+    await processarMensagem(t.deps, 'c1', msg({ texto: 'me passa pra Bruna' })),
+    'passado_para_humano',
+  );
+  assertEquals(esperou, false);
+  assertEquals(t.llm(), 0);
+  assertEquals(t.repo.humano, 'cliente pediu atendimento humano');
 });

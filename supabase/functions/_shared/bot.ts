@@ -82,8 +82,65 @@ export type Resultado =
 
 const TIPOS_TEXTO = new Set(['text', 'button', 'interactive']);
 const TIPOS_COMPROVANTE = new Set(['image', 'document']);
-const PEDIDO_HUMANO =
-  /\b(atendente|humano|humana|pessoa de verdade|falar com (a|o)? ?(dona|bruna|algu[eé]m))\b/i;
+// Pedido de falar com uma pessoa. Roda sobre o texto sem acento e em minúsculas.
+// "humano/humana" sozinho NÃO conta: "cabelo humano" é um serviço do salão.
+const PEDIDO_HUMANO = new RegExp(
+  [
+    String.raw`\batendente\b`,
+    String.raw`\batendimento humano\b`,
+    String.raw`\b(pessoa|ser) humano\b`,
+    String.raw`\b(pessoa|gente|ser humano) (de verdade|real)\b`,
+    String
+      .raw`\b(falar|conversar|chamar|chama|passa|passe|passar|fale|fala|cade)\b.{0,25}\b(bruna|dona|responsavel|alguem|uma pessoa|gerente|proprietaria)\b`,
+    String.raw`\b(quero|preciso|prefiro)\b.{0,15}\b(a bruna|a dona|uma pessoa|alguem)\b`,
+  ].join('|'),
+);
+
+// Palavra-chave solta ("Atendente", "Humano", "Sair"...): só vale quando a mensagem é
+// curta e o resto são palavras de enfeite. Assim "cabelo humano" não dispara.
+const PALAVRAS_CHAVE = new Set([
+  'atendente',
+  'atendentes',
+  'atendimento',
+  'humano',
+  'humana',
+  'pessoa',
+  'sair',
+  'bruna',
+  'dona',
+  'responsavel',
+]);
+const ENFEITE = new Set([
+  'por',
+  'favor',
+  'pfv',
+  'pf',
+  'quero',
+  'preciso',
+  'um',
+  'uma',
+  'o',
+  'a',
+  'com',
+  'falar',
+  'chamar',
+  'de',
+  'ai',
+  'aqui',
+  'sim',
+  'agora',
+  'urgente',
+]);
+
+/** A cliente quer falar com uma pessoa (Bruna), não com a assistente. */
+export function pedeHumano(texto: string): boolean {
+  const limpo = texto.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  if (PEDIDO_HUMANO.test(limpo)) return true;
+  const palavras = limpo.replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
+  return palavras.length > 0 && palavras.length <= 4 &&
+    palavras.some((p) => PALAVRAS_CHAVE.has(p)) &&
+    palavras.every((p) => PALAVRAS_CHAVE.has(p) || ENFEITE.has(p));
+}
 // Silêncio exigido da cliente antes de responder: cada mensagem espera isso e só a última
 // da sequência segue ("oi" / "tudo bem" / "?" viram uma resposta só). Cobre quem digita devagar.
 export const ESPERA_AGRUPAR_MS = 6000;
@@ -156,6 +213,19 @@ export async function processarMensagem(
   conversaId: string,
   msg: MensagemRecebida,
 ): Promise<Resultado> {
+  // Pedido de falar com a Bruna: vai direto, sem esperar o agrupamento nem chamar a IA.
+  // (As mensagens anteriores, ainda esperando, veem que esta é mais nova e não respondem.)
+  if (TIPOS_TEXTO.has(msg.tipo) && msg.texto && pedeHumano(msg.texto)) {
+    const atual = await deps.repo.conversa(conversaId);
+    if (atual.botPausado) return 'pausado';
+    return passarParaHumano(
+      deps,
+      atual,
+      'cliente pediu atendimento humano',
+      'Você pediu para falar com uma pessoa.',
+    );
+  }
+
   await deps.esperar(ESPERA_AGRUPAR_MS);
 
   const c = await deps.repo.conversa(conversaId);
@@ -200,14 +270,6 @@ export async function processarMensagem(
       c,
       `mensagem do tipo "${msg.tipo}" (a IA só lê texto)`,
       'Por aqui eu só consigo ler texto, então não consigo ver o que você mandou.',
-    );
-  }
-  if (PEDIDO_HUMANO.test(msg.texto)) {
-    return passarParaHumano(
-      deps,
-      c,
-      'cliente pediu atendimento humano',
-      'Você pediu para falar com uma pessoa.',
     );
   }
   const servicos = await deps.repo.servicosAtivos();
