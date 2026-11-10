@@ -1,0 +1,22 @@
+# Roda no GitHub o mesmo que roda local: lint, formatação, tipos e testes.
+name: Validação
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+      - name: Configurar Deno 2
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Validar (lint, formato, tipos e testes)
+        run: deno task validar

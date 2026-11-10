@@ -30,7 +30,7 @@ import {
   enviarResumo,
   lerConfigAviso,
 } from '../_shared/aviso.ts';
-import { AtendenteClaude } from '../_shared/llm.ts';
+import { criarAtendente } from '../_shared/atendente.ts';
 import { SALAO } from '../_shared/salao.ts';
 import { EVENTO_DE_ERRO, registrarEvento } from '../_shared/eventos.ts';
 
@@ -146,7 +146,7 @@ async function tratarInterno(req: Request): Promise<Response> {
 
   const deps: DepsBot = {
     repo,
-    atendente: new AtendenteClaude(exigirEnv('SALAO_ANTHROPIC_API_KEY')),
+    atendente: criarAtendente((n) => Deno.env.get(n)),
     salao: SALAO,
     enviar: (para, texto) => enviarTexto(wa, para, texto),
     avisar: (c, motivo) =>

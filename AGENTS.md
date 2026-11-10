@@ -18,9 +18,11 @@ textos do bot). Mantenha assim.
 
 - `supabase/functions/salao-webhook|salao-responder|salao-sincronizar/` — cada função tem
   `index.ts` (entrada fina) e `handler.ts` (lógica testável).
-- `supabase/functions/_shared/` — módulos comuns: `bot.ts` (regras e prompt), `llm.ts`,
-  `whatsapp.ts`, `assinatura.ts`, `aviso.ts`, `agendamento.ts`, `disponibilidade.ts`,
-  `minhaagenda.ts`, `salao.ts` (dados fixos do salão), `db.ts`.
+- `supabase/functions/_shared/` — módulos comuns: `bot.ts` (regras do bot), `llm.ts` (IA
+  sem provedor: tipos, prompt, validação), `llm_claude.ts` (provedor Anthropic) e
+  `atendente.ts` (escolhe o provedor por `SALAO_LLM_PROVEDOR`), `whatsapp.ts`,
+  `assinatura.ts`, `aviso.ts`, `agendamento.ts`, `disponibilidade.ts`, `minhaagenda.ts`,
+  `salao.ts` (dados fixos do salão), `db.ts`.
 - `supabase/migrations/` — SQL com RLS. Nova mudança de esquema = novo arquivo com
   timestamp; nunca editar migration já aplicada.
 - `supabase/tests/` — testes Deno, sem rede e sem banco (`fetch` falso, fixtures em

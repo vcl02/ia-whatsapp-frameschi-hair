@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from 'jsr:@std/assert@1.0.13';
+import { assertEquals, assertStringIncludes, assertThrows } from 'jsr:@std/assert@1.0.13';
 import {
   montarMensagens,
   montarSistema,
@@ -81,7 +81,10 @@ Deno.test('prompt inclui as regras de agendamento quando existem', async () => {
 });
 
 // ---------- laço da ferramenta de horários, com cliente falso ----------
-import { AtendenteClaude, type ClienteMensagens } from '../functions/_shared/llm.ts';
+import {
+  AtendenteClaude,
+  type ClienteMensagens,
+} from '../functions/_shared/llm_claude.ts';
 import { DEF_CONSULTAR } from '../functions/_shared/agendamento.ts';
 
 function respostaFinal(resposta: string) {
@@ -329,4 +332,57 @@ Deno.test('prompt: a IA não agenda; quem agenda é o sistema com o comprovante 
   assertStringIncludes(s, 'sinal de 20%');
   assertStringIncludes(s, 'Quem agenda é o sistema');
   assertEquals(s.includes('confirmar_agendamento'), false);
+});
+
+Deno.test('soma o uso de tokens das chamadas (inclusive as de ferramenta)', async () => {
+  const { cliente } = clienteFalso([
+    {
+      stop_reason: 'tool_use',
+      content: [{ type: 'tool_use', id: 't1', name: 'consultar_horarios', input: {} }],
+      usage: { input_tokens: 100, output_tokens: 10, cache_read_input_tokens: 80 },
+    },
+    {
+      ...respostaFinal('oi'),
+      usage: { input_tokens: 120, output_tokens: 20, cache_read_input_tokens: 90 },
+    },
+  ]);
+  const d = await new AtendenteClaude('x', () => new Date(), cliente).responder(
+    [{ autor: 'cliente', texto: 'oi' }],
+    SERVICOS_COM_ID,
+    SALAO,
+    {
+      ferramentas: {
+        definicoes: [DEF_CONSULTAR],
+        executar: () => Promise.resolve('ok'),
+      },
+    },
+  );
+  assertEquals(d.uso, { entrada: 220, saida: 30, cache: 170 });
+});
+
+Deno.test('validarDecisao descarta campos extras (uso não vem do modelo)', () => {
+  const d = validarDecisao({
+    resposta: 'x',
+    passar_para_humano: false,
+    motivo: '',
+    intencao: 'duvida',
+    uso: { entrada: 1 },
+  });
+  assertEquals(d && 'uso' in d, false);
+});
+
+import { criarAtendente } from '../functions/_shared/atendente.ts';
+
+Deno.test('criarAtendente: padrão é Anthropic; falta de chave e provedor desconhecido falham', () => {
+  const env = (m: Record<string, string>) => (n: string) => m[n];
+  assertEquals(
+    criarAtendente(env({ SALAO_ANTHROPIC_API_KEY: 'k' })) instanceof AtendenteClaude,
+    true,
+  );
+  assertThrows(() => criarAtendente(env({})), Error, 'SALAO_ANTHROPIC_API_KEY');
+  assertThrows(
+    () => criarAtendente(env({ SALAO_LLM_PROVEDOR: 'x', SALAO_ANTHROPIC_API_KEY: 'k' })),
+    Error,
+    'desconhecido',
+  );
 });

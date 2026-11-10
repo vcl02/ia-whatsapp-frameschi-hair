@@ -302,6 +302,7 @@ export async function processarMensagem(
     intencao: decisao.intencao,
     humano: decisao.passar_para_humano,
     envio_ok: envio.ok,
+    uso: decisao.uso, // tokens (custo); sem texto de mensagem
   });
   return decisao.passar_para_humano ? 'passado_para_humano' : 'respondido';
 }
