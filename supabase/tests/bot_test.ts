@@ -15,6 +15,7 @@ import { SERVICOS_TESTE } from './salao_teste.ts';
 class RepoFake implements Repositorio {
   c: Conversa = { id: 'c1', waId: '55', nomePerfil: 'Ana', botPausado: false };
   ultima = 'wamid.1';
+  novaDuranteLLM = false;
   servicos: Servico[] = SERVICOS_TESTE;
   jaRespondeu = true;
   saidas: { autor: string; texto: string }[] = [];
@@ -89,6 +90,7 @@ function montar(decisao: DecisaoLLM | Error) {
       salaoRecebido.valor = salao;
       chamadasLLM++;
       if (repo.pausarDuranteLLM) repo.c.botPausado = true;
+      if (repo.novaDuranteLLM) repo.ultima = 'wamid.nova';
       return decisao instanceof Error
         ? Promise.reject(decisao)
         : Promise.resolve(decisao);
@@ -499,4 +501,16 @@ Deno.test('outra passagem para a Bruna não marca cancelamento', async () => {
   t.deps.registrarPedidoCancelamento = () => (chamou = true, Promise.resolve(null));
   await processarMensagem(t.deps, 'c1', msg());
   assertEquals(chamou, false);
+});
+
+Deno.test('chegou mensagem nova enquanto a LLM respondia: descarta a resposta velha', async () => {
+  const t = montar(ok);
+  t.repo.novaDuranteLLM = true;
+  assertEquals(
+    await processarMensagem(t.deps, 'c1', msg()),
+    'substituida_por_mais_recente',
+  );
+  assertEquals(t.llm(), 1);
+  assertEquals(t.enviados.length, 0);
+  assertEquals(t.repo.humano, null);
 });

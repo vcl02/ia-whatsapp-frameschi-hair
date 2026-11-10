@@ -84,7 +84,9 @@ const TIPOS_TEXTO = new Set(['text', 'button', 'interactive']);
 const TIPOS_COMPROVANTE = new Set(['image', 'document']);
 const PEDIDO_HUMANO =
   /\b(atendente|humano|humana|pessoa de verdade|falar com (a|o)? ?(dona|bruna|algu[eé]m))\b/i;
-export const ESPERA_AGRUPAR_MS = 4000; // junta mensagens mandadas em sequência
+// Silêncio exigido da cliente antes de responder: cada mensagem espera isso e só a última
+// da sequência segue ("oi" / "tudo bem" / "?" viram uma resposta só). Cobre quem digita devagar.
+export const ESPERA_AGRUPAR_MS = 6000;
 const LIMITE_HISTORICO = 20;
 // Proteção de custo: acima disso a conversa vai para humano sem chamar a LLM.
 export const LIMITE_POR_CONVERSA_HORA = 20;
@@ -274,6 +276,15 @@ export async function processarMensagem(
 
   // Confere de novo: alguém pode ter pausado enquanto a LLM respondia.
   if ((await deps.repo.conversa(c.id)).botPausado) return 'pausado';
+
+  // A cliente pode ter mandado mais uma mensagem enquanto a LLM pensava (leva vários
+  // segundos). Esta resposta já nasceu velha: descarta, e a mensagem nova (que também
+  // espera e lê o histórico inteiro) responde a tudo de uma vez.
+  const maisNova = await deps.repo.ultimaEntradaWamid(c.id);
+  if (maisNova && maisNova !== msg.wamid) {
+    deps.log('resposta_descartada_mensagem_nova', { conversa: c.id });
+    return 'substituida_por_mais_recente';
+  }
 
   if (decisao.passar_para_humano) {
     let motivo = decisao.motivo || 'decisão da IA';
