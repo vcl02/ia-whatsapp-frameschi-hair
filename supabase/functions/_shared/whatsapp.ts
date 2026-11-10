@@ -115,6 +115,12 @@ export function lerEventos(
         const wamid = str(m.id);
         const waId = str(m.from);
         if (!wamid || !waId) continue;
+        // Reação (emoji em cima de uma mensagem) não é conversa: não grava, não responde
+        // e não chama ninguém. Emoji digitado como texto segue como mensagem normal.
+        if (m.type === "reaction") {
+          out.ignorados++;
+          continue;
+        }
         out.mensagens.push({
           wamid,
           waId,
@@ -231,34 +237,36 @@ export function enviarModelo(
 }
 
 /**
- * Lista de números que o bot pode responder (fase de testes).
- * Vazia = responde todo mundo.
+ * Quem a IA atende (listas editadas no painel, tabela salao_numeros):
+ *  - lista de teste NÃO vazia: só atende quem está nela (e ela vale mesmo para quem
+ *    também está na lista de familiares);
+ *  - lista de teste vazia: atende todos, menos quem está na lista de familiares.
  */
-export function lerPermitidos(valor: string | undefined): Set<string> {
-  return new Set(
-    (valor ?? "")
-      .split(",")
-      .map((s) => s.replace(/\D/g, ""))
-      .filter(Boolean),
-  );
+export interface ListasNumeros {
+  teste: Set<string>;
+  familiar: Set<string>;
 }
 
-export function botPodeResponder(
-  permitidos: Set<string>,
-  waId: string,
-): boolean {
-  return permitidos.size === 0 || permitidos.has(waId);
+/** Só dígitos, com 55 na frente quando vier sem código do país (DDD + número). */
+export function normalizarNumero(valor: string): string {
+  const d = valor.replace(/\D/g, "");
+  return d.length === 10 || d.length === 11 ? `55${d}` : d;
+}
+
+export function atendeNumero(listas: ListasNumeros, waId: string): boolean {
+  if (listas.teste.size > 0) return listas.teste.has(waId);
+  return !listas.familiar.has(waId);
 }
 
 /**
- * Remove tudo que envolve números fora da lista (mensagens, ecos e statuses).
- * Lista vazia = mantém tudo.
+ * Remove tudo que envolve números que a IA não atende (mensagens, ecos e statuses):
+ * nada deles é gravado nem respondido.
  */
-export function filtrarPorPermitidos(
+export function filtrarPorListas(
   ev: EventosWebhook,
-  permitidos: Set<string>,
+  listas: ListasNumeros,
 ): { eventos: EventosWebhook; descartados: number } {
-  const ok = (n: string | null) => botPodeResponder(permitidos, n ?? "");
+  const ok = (n: string | null) => atendeNumero(listas, n ?? "");
   const eventos: EventosWebhook = {
     mensagens: ev.mensagens.filter((m) => ok(m.waId)),
     statuses: ev.statuses.filter((s) => ok(s.recipientId)),

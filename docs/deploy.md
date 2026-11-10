@@ -6,7 +6,7 @@
   `salao-responder` (v1, com JWT) publicadas no hub.
 - 2026-11-06: secrets `SALAO_*` cadastrados, webhook assinado na Meta, primeira
   conversa de teste entregue e lida. `salao-webhook` republicada com a lista
-  `SALAO_SO_RESPONDER_PARA` (só a Isa responde na fase de testes).
+  `SALAO_SO_RESPONDER_PARA` (legado; a lista de teste e a de familiares agora são editadas no painel, tabela `salao_numeros`).
 - 2026-11-07: espelho do Minha Agenda no ar (`salao-sincronizar`, pg_cron
   diário 09:07 UTC). Primeira sincronização: 64 serviços, horário e regras.
   `salao-webhook` lê horário/regras do banco. Revoke da função de gatilho aplicado.
@@ -22,7 +22,7 @@ isolado por prefixo. Número: o seu número já registrado na API.
 | 2 | Inserir o seu usuário em `salao_equipe` | tabela `salao_equipe` | libera a tela para você |
 | 3 | Cadastrar serviços e preços (pela tela, depois do passo 6) | tabela `salao_servicos` | o bot passa a responder com a LLM |
 | 4 | Secrets `SALAO_*` (lista em `.env.example`) | Edge Functions do hub (vale para o projeto todo) | guarda token da Meta, app secret, chave da Anthropic, e-mail de aviso |
-| 5 | Deploy de `salao-webhook` e `salao-responder` | Edge Functions do hub | publica as URLs; as funções do hub não mudam |
+| 5 | Deploy de `salao-webhook` (e `salao-responder`, que só responde 410) | Edge Functions do hub | publica as URLs; as funções do hub não mudam |
 | 6 | Webhook no app da Meta: URL de `salao-webhook` + verify token; assinar `messages` (e `smb_message_echoes` quando for o número da Bruna) | app na Meta | a Meta passa a mandar mensagens e statuses |
 | 7 | Conta no Resend, domínio/remetente verificado, chave em `SALAO_RESEND_API_KEY` | Resend | ativa o aviso por e-mail |
 
@@ -40,3 +40,15 @@ visão e funções `salao_*`.
 3. Conferir a política atual da Meta para IA.
 4. Confirmar com a Bruna se ela usa os lembretes por WhatsApp do Minha Agenda.
 5. Migrar o número da Bruna (coexistência) e assinar `smb_message_echoes`.
+
+## Arquivos de cada função (deploy pelo MCP, tudo inline)
+- `salao-webhook`: index, handler e, em `_shared`: assinatura, whatsapp, deps, db, llm,
+  disponibilidade, agendamento, bot, salao, aviso, lembrete, eventos.
+- `salao-lembrete`: index, handler e, em `_shared`: deps, whatsapp, db, salao, bot, llm,
+  disponibilidade, agendamento, lembrete, eventos, alertas, aviso.
+- `salao-sincronizar`: index, handler e, em `_shared`: deps, db, llm, aviso, minhaagenda,
+  agendamento, disponibilidade, salao, bot, whatsapp, lembrete (o `db.ts` importa
+  `agendamento.ts`, que importa `disponibilidade.ts`).
+- Cuidado com o espaço especial (U+00A0) na regex de `minhaagenda.ts`: se virar espaço
+  comum, a sincronização acha que todos os preços mudaram.
+- Depois de cada deploy, comparar os arquivos publicados com os do repositório.

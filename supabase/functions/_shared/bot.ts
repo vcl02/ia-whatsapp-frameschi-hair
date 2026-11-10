@@ -8,8 +8,12 @@ import {
   type DadosSalao,
   type Servico,
 } from "./salao.ts";
-import type { Atendente, ItemHistorico } from "./llm.ts";
-import type { ContextoConversa, Ferramentas } from "./agendamento.ts";
+import type { Atendente, ConfigIA, ItemHistorico } from "./llm.ts";
+import type {
+  ContextoConversa,
+  Ferramentas,
+  ResultadoComprovante,
+} from "./agendamento.ts";
 
 export interface Conversa {
   id: string;
@@ -19,6 +23,8 @@ export interface Conversa {
 }
 
 export interface Repositorio {
+  /** Modelo, esforço e limites escolhidos no painel. */
+  config(): Promise<ConfigIA>;
   conversa(id: string): Promise<Conversa>;
   historico(conversaId: string, limite: number): Promise<ItemHistorico[]>;
   ultimaEntradaWamid(conversaId: string): Promise<string | null>;
@@ -47,6 +53,21 @@ export interface DepsBot {
   esperar(ms: number): Promise<void>;
   /** Ferramentas do modelo (consultar/propor/confirmar). Ausente = desligadas. */
   ferramentas?: (ctx: ContextoConversa) => Ferramentas;
+  /**
+   * Imagem ou PDF recebido: se houver proposta pendente, agenda e devolve o que responder.
+   * Devolve null quando não há proposta (o bot segue o caminho normal).
+   */
+  receberComprovante?: (
+    conversa: Conversa,
+    msg: MensagemRecebida,
+  ) => Promise<ResultadoComprovante | null>;
+  /** Situação do agendamento da conversa em texto para a IA (ou null). */
+  contextoAgendamento?: (conversaId: string) => Promise<string | null>;
+  /**
+   * A cliente pediu para cancelar ou remarcar: marca o agendamento dela e devolve o
+   * resumo (ou null se ela não tem agendamento ativo).
+   */
+  registrarPedidoCancelamento?: (conversaId: string) => Promise<string | null>;
   /** Número entre 0 e 1 (Math.random). Injetável para os testes. */
   aleatorio?: () => number;
   log(evento: string, dados?: Record<string, unknown>): void;
@@ -56,9 +77,11 @@ export type Resultado =
   | "pausado"
   | "substituida_por_mais_recente"
   | "respondido"
+  | "ignorado"
   | "passado_para_humano";
 
 const TIPOS_TEXTO = new Set(["text", "button", "interactive"]);
+const TIPOS_COMPROVANTE = new Set(["image", "document"]);
 const PEDIDO_HUMANO =
   /\b(atendente|humano|humana|pessoa de verdade|falar com (a|o)? ?(dona|bruna|algu[eé]m))\b/i;
 export const ESPERA_AGRUPAR_MS = 4000; // junta mensagens mandadas em sequência
@@ -100,17 +123,23 @@ async function marcarEAvisar(deps: DepsBot, c: Conversa, motivo: string) {
   }
 }
 
+/**
+ * `motivo` é para a equipe (e-mail e painel). `explicacao` é a razão em linguagem
+ * simples que a cliente lê antes do aviso de que a Bruna vai responder.
+ */
 async function passarParaHumano(
   deps: DepsBot,
   c: Conversa,
   motivo: string,
+  explicacao?: string,
 ): Promise<Resultado> {
   // Pausa antes de enviar: se o envio falhar, o bot já não volta a responder.
   await marcarEAvisar(deps, c, motivo);
+  const passagem = escolher(deps.salao.mensagensPassagemHumano, deps.aleatorio);
   const envio = await enviarComApresentacao(
     deps,
     c,
-    escolher(deps.salao.mensagensPassagemHumano, deps.aleatorio),
+    explicacao ? `${explicacao}\n\n${passagem}` : passagem,
   );
   deps.log("passado_para_humano", {
     conversa: c.id,
@@ -130,6 +159,35 @@ export async function processarMensagem(
   const c = await deps.repo.conversa(conversaId);
   if (c.botPausado) return "pausado";
 
+  // Comprovante de Pix (imagem ou PDF) de uma proposta pendente: o código agenda, sem IA.
+  // Vem antes da checagem abaixo: se a cliente mandar outra mensagem logo depois, o
+  // comprovante não pode se perder.
+  if (TIPOS_COMPROVANTE.has(msg.tipo) && deps.receberComprovante) {
+    let r: ResultadoComprovante | null;
+    try {
+      r = await deps.receberComprovante(c, msg);
+    } catch (e) {
+      deps.log("erro_comprovante", { conversa: c.id, erro: String(e) });
+      return passarParaHumano(
+        deps,
+        c,
+        "falha ao processar o comprovante",
+        "Recebi seu comprovante, mas deu um problema no sistema na hora de processar.",
+      );
+    }
+    if (r?.acao === "ignorar") return "ignorado";
+    if (r?.acao === "responder") {
+      const envio = await enviarComApresentacao(deps, c, r.texto);
+      deps.log("comprovante_agendado", { conversa: c.id, envio_ok: envio.ok });
+      return "respondido";
+    }
+    if (r?.acao === "humano") {
+      await marcarEAvisar(deps, c, r.motivo);
+      await enviarComApresentacao(deps, c, r.texto);
+      return "passado_para_humano";
+    }
+  }
+
   // Se chegou outra mensagem depois desta, quem responde é o processamento dela.
   const ultima = await deps.repo.ultimaEntradaWamid(c.id);
   if (ultima && ultima !== msg.wamid) return "substituida_por_mais_recente";
@@ -138,11 +196,17 @@ export async function processarMensagem(
     return passarParaHumano(
       deps,
       c,
-      `mensagem do tipo "${msg.tipo}" (o bot só lê texto)`,
+      `mensagem do tipo "${msg.tipo}" (a IA só lê texto)`,
+      "Por aqui eu só consigo ler texto, então não consigo ver o que você mandou.",
     );
   }
   if (PEDIDO_HUMANO.test(msg.texto)) {
-    return passarParaHumano(deps, c, "cliente pediu atendimento humano");
+    return passarParaHumano(
+      deps,
+      c,
+      "cliente pediu atendimento humano",
+      "Você pediu para falar com uma pessoa.",
+    );
   }
   const servicos = await deps.repo.servicosAtivos();
   const salao = comInfoEspelhada(deps.salao, await deps.repo.infoSalao());
@@ -152,54 +216,82 @@ export async function processarMensagem(
       deps,
       c,
       `dados do salão incompletos: ${faltando.join(", ")}`,
+      "Não estou conseguindo acessar as informações do salão agora.",
     );
   }
 
+  const cfg = await deps.repo.config();
   const agora = Date.now();
   if (
     (await deps.repo.respostasDoBot(c.id, new Date(agora - HORA_MS))) >=
-    LIMITE_POR_CONVERSA_HORA
+    cfg.limiteConversaHora
   ) {
     return passarParaHumano(
       deps,
       c,
-      `limite de ${LIMITE_POR_CONVERSA_HORA} respostas automáticas por hora nesta conversa`,
+      `limite de ${cfg.limiteConversaHora} respostas automáticas por hora nesta conversa`,
+      "Já trocamos bastante mensagem por aqui na última hora.",
     );
   }
   if (
     (await deps.repo.respostasDoBot(null, new Date(agora - 24 * HORA_MS))) >=
-    LIMITE_GLOBAL_DIA
+    cfg.limiteGlobalDia
   ) {
     return passarParaHumano(
       deps,
       c,
-      `limite diário de ${LIMITE_GLOBAL_DIA} respostas automáticas atingido`,
+      `limite diário de ${cfg.limiteGlobalDia} respostas automáticas atingido`,
+      "Hoje estou com muitas conversas ao mesmo tempo.",
     );
   }
 
   let decisao;
   try {
     const historico = await deps.repo.historico(c.id, LIMITE_HISTORICO);
+    const contextoAgendamento = await deps
+      .contextoAgendamento?.(c.id)
+      .catch(() => null);
     decisao = await deps.atendente.responder(historico, servicos, salao, {
       ferramentas: deps.ferramentas?.({
         conversaId: c.id,
         waId: c.waId,
-        ultimaMensagem: msg.texto,
-        ultimaMensagemEm: msg.recebidaEm,
         servicos,
       }),
       nomeCliente: c.nomePerfil,
+      contextoAgendamento,
+      modelo: cfg.modelo,
+      esforco: cfg.esforco,
     });
   } catch (e) {
     deps.log("erro_llm", { conversa: c.id, erro: String(e) });
-    return passarParaHumano(deps, c, "falha ao gerar resposta automática");
+    return passarParaHumano(
+      deps,
+      c,
+      "falha ao gerar resposta automática",
+      "Tive um problema aqui para te responder.",
+    );
   }
 
   // Confere de novo: alguém pode ter pausado enquanto a LLM respondia.
   if ((await deps.repo.conversa(c.id)).botPausado) return "pausado";
 
   if (decisao.passar_para_humano) {
-    await marcarEAvisar(deps, c, decisao.motivo || "decisão do bot");
+    let motivo = decisao.motivo || "decisão da IA";
+    if (decisao.intencao === "remarcar_ou_cancelar") {
+      const agendamento = await deps
+        .registrarPedidoCancelamento?.(c.id)
+        .catch(() => null);
+      if (agendamento) {
+        motivo = `${motivo} (Agendamento da cliente: ${agendamento}. Cancele ou remarque no Minha Agenda. O sinal não é devolvido.)`;
+      }
+    }
+    await marcarEAvisar(deps, c, motivo);
+  }
+  // Resposta vazia sem passar para humano = não há nada a dizer (ex.: a cliente só
+  // agradeceu logo depois do agendamento): não manda nada.
+  if (!decisao.resposta.trim() && !decisao.passar_para_humano) {
+    deps.log("resposta_vazia", { conversa: c.id, intencao: decisao.intencao });
+    return "ignorado";
   }
   const texto =
     decisao.resposta.trim() ||

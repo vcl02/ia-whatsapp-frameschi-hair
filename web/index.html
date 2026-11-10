@@ -5,273 +5,704 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
     <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#1e2126" />
     <meta
       http-equiv="Content-Security-Policy"
       content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; connect-src https://yzmyncxoskvqzdczaill.supabase.co wss://yzmyncxoskvqzdczaill.supabase.co; img-src 'self' data:; base-uri 'none'; form-action 'none'"
     />
-    <title>Conversas do salão</title>
+    <title>Painel IA</title>
     <link rel="icon" type="image/png" href="../favicon.png" />
     <link rel="apple-touch-icon" href="../apple-touch-icon.png" />
     <style>
       :root {
-        --bg: #fafafa;
-        --fg: #1a1a1a;
-        --muted: #666;
-        --line: #ddd;
-        --card: #fff;
-        --cliente: #fff;
-        --bot: #e8f0fe;
-        --humano: #e6f4ea;
-        --alerta: #b3261e;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #121212;
-          --fg: #eee;
-          --muted: #aaa;
-          --line: #333;
-          --card: #1e1e1e;
-          --cliente: #1e1e1e;
-          --bot: #1c2a44;
-          --humano: #1d3326;
-          --alerta: #f28b82;
-        }
+        --bg: #1e2126;
+        --surface: #272b32;
+        --surface-2: #2f343c;
+        --line: #3a404a;
+        --fg: #e9ebee;
+        --muted: #9aa3af;
+        --gold: #d6b36a;
+        --gold-soft: rgba(214, 179, 106, 0.14);
+        --ok: #62c98f;
+        --ok-soft: rgba(98, 201, 143, 0.14);
+        --warn: #e6b866;
+        --warn-soft: rgba(230, 184, 102, 0.14);
+        --bad: #ef7f7f;
+        --bad-soft: rgba(239, 127, 127, 0.14);
+        --radius: 16px;
       }
       * {
         box-sizing: border-box;
       }
+      html {
+        color-scheme: dark;
+      }
       body {
         margin: 0;
-        font:
-          15px/1.4 system-ui,
-          sans-serif;
         background: var(--bg);
         color: var(--fg);
+        font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        -webkit-font-smoothing: antialiased;
       }
-      header {
-        display: flex;
-        gap: 12px;
-        align-items: center;
-        padding: 10px 16px;
-        border-bottom: 1px solid var(--line);
-      }
-      header h1 {
-        font-size: 16px;
+      h1,
+      h2,
+      h3,
+      p {
         margin: 0;
-        flex: 1;
-      }
-      header img {
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
       }
       button {
         font: inherit;
-        padding: 6px 12px;
-        border: 1px solid var(--line);
-        border-radius: 6px;
-        background: var(--card);
-        color: var(--fg);
+        color: inherit;
         cursor: pointer;
       }
-      input,
-      textarea {
+      input {
         font: inherit;
-        padding: 8px;
-        border: 1px solid var(--line);
-        border-radius: 6px;
-        background: var(--card);
         color: var(--fg);
-        width: 100%;
-      }
-      #login {
-        max-width: 320px;
-        margin: 48px auto;
-        padding: 0 16px;
-        display: grid;
-        gap: 8px;
-      }
-      #app {
-        display: grid;
-        grid-template-columns: 300px 1fr;
-        height: calc(100vh - 49px);
-      }
-      #lista {
-        border-right: 1px solid var(--line);
-        overflow-y: auto;
-      }
-      .item {
-        padding: 10px 16px;
-        border-bottom: 1px solid var(--line);
-        cursor: pointer;
-      }
-      .item.ativo {
-        background: var(--bot);
-      }
-      .item small {
-        color: var(--muted);
-        display: block;
-      }
-      .tag {
-        font-size: 12px;
-        padding: 1px 6px;
+        background: var(--surface-2);
+        border: 1px solid var(--line);
         border-radius: 10px;
-        border: 1px solid currentColor;
-        margin-left: 4px;
-      }
-      .alerta {
-        color: var(--alerta);
-      }
-      #conversa {
-        display: flex;
-        flex-direction: column;
-        min-width: 0;
-      }
-      #topo {
-        padding: 10px 16px;
-        border-bottom: 1px solid var(--line);
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        flex-wrap: wrap;
-      }
-      #topo strong {
-        flex: 1;
-      }
-      #msgs {
-        flex: 1;
-        overflow-y: auto;
-        padding: 16px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-      .msg {
-        max-width: 75%;
-        padding: 8px 10px;
-        border-radius: 8px;
-        border: 1px solid var(--line);
-        white-space: pre-wrap;
-        word-wrap: break-word;
-      }
-      .msg.cliente {
-        background: var(--cliente);
-        align-self: flex-start;
-      }
-      .msg.bot {
-        background: var(--bot);
-        align-self: flex-end;
-      }
-      .msg.humano {
-        background: var(--humano);
-        align-self: flex-end;
-      }
-      .msg small {
-        display: block;
-        color: var(--muted);
-        font-size: 12px;
-        margin-top: 4px;
-      }
-      #envio {
-        display: flex;
-        gap: 8px;
-        padding: 12px 16px;
-        border-top: 1px solid var(--line);
-      }
-      #envio textarea {
-        height: 60px;
-        resize: vertical;
-      }
-      #falhas {
-        padding: 16px;
-        overflow: auto;
-      }
-      table {
-        border-collapse: collapse;
+        padding: 11px 12px;
         width: 100%;
-        font-size: 13px;
       }
-      td,
-      th {
-        border: 1px solid var(--line);
-        padding: 4px 6px;
-        text-align: left;
-        vertical-align: top;
+      input:focus-visible,
+      button:focus-visible {
+        outline: 2px solid var(--gold);
+        outline-offset: 2px;
       }
       .oculto {
         display: none !important;
       }
-      #servicos {
-        padding: 16px;
-        overflow: auto;
+
+      /* topo */
+      .topo {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        max-width: 1040px;
+        margin: 0 auto;
+        padding: 18px 20px;
+      }
+      .topo img {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+      }
+      .ia-topo {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .marca {
+        min-width: 0;
+      }
+      .topo .meta {
+        color: var(--muted);
+        font-size: 12.5px;
+      }
+      .marca h1 {
+        font-size: 17px;
+        font-weight: 650;
+        letter-spacing: 0.2px;
+      }
+      .marca p {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .btn {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 8px 14px;
+        transition: background 0.15s;
+      }
+      .btn:hover {
+        background: var(--surface-2);
+      }
+      .btn-icone {
+        width: 38px;
+        height: 38px;
+        padding: 0;
+        display: inline-grid;
+        place-items: center;
+      }
+      .btn-icone svg {
+        width: 20px;
+        height: 20px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .btn-icone.sair {
+        color: var(--bad);
+        background: var(--bad-soft);
+        border-color: var(--bad);
+      }
+      .btn-icone.sair:hover {
+        background: var(--bad-soft);
+        filter: brightness(1.2);
+      }
+      body:not(.ver-tecnico) .tecnico {
+        display: none !important;
+      }
+      body.ver-tecnico #btnOlho .fechado,
+      body:not(.ver-tecnico) #btnOlho .aberto {
+        display: none;
+      }
+      #btnOlho {
+        position: relative;
+      }
+      #btnOlho.com-alerta::after {
+        content: "";
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--bad);
+        box-shadow: 0 0 0 2px var(--bg);
+      }
+      .btn.atualizar.girando svg {
+        animation: gira 0.8s linear infinite;
+      }
+      @keyframes gira {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .topo .acoes {
+        display: flex;
+        gap: 8px;
+      }
+      .btn.pequeno {
+        padding: 5px 11px;
+        font-size: 13px;
+      }
+      .btn.ouro {
+        background: var(--gold);
+        border-color: var(--gold);
+        color: #1e2126;
+        font-weight: 600;
+      }
+
+      /* login */
+      #login {
+        max-width: 360px;
+        margin: 56px auto;
+        padding: 24px;
+        display: grid;
+        gap: 12px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+      }
+      #login h2 {
+        font-size: 18px;
+      }
+      #erroLogin {
+        color: var(--bad);
+        font-size: 13px;
+        min-height: 1em;
+      }
+
+      /* layout */
+      main {
+        max-width: 1040px;
+        margin: 0 auto;
+        padding: 0 20px 40px;
+        display: grid;
+        gap: 16px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 20px;
+      }
+      .card h2 {
+        font-size: 15px;
+        font-weight: 650;
+        margin-bottom: 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .card h2 {
+        flex-wrap: wrap;
+      }
+      .card h2 .contagem {
+        white-space: nowrap;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+        background: var(--surface-2);
+        border-radius: 999px;
+        padding: 1px 9px;
+      }
+      .aviso-icone {
+        width: 22px;
+        height: 22px;
+        flex: none;
+        fill: none;
+        stroke: #f0a04b;
+        stroke-width: 2.2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .linha.atencao {
+        background: rgba(230, 184, 102, 0.17);
+        box-shadow: inset 0 0 0 1px rgba(230, 184, 102, 0.4);
+      }
+      .card h2 .contagem.ok {
+        color: var(--ok);
+        background: var(--ok-soft);
+      }
+      .card h2 .contagem.aviso {
+        color: var(--bad);
+        background: var(--bad-soft);
+      }
+      .grade {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+
+      /* interruptor da IA */
+      .hero {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 18px;
+        text-align: left;
+        background: linear-gradient(135deg, var(--surface) 0%, var(--surface-2) 100%);
+      }
+      .hero.ligada {
+        border-color: rgba(98, 201, 143, 0.45);
+      }
+      .hero.desligada {
+        border-color: rgba(239, 127, 127, 0.45);
+      }
+      .hero .texto {
+        min-width: 0;
+      }
+      .hero h2 {
+        font-size: 16px;
+        margin-bottom: 0;
+      }
+      .hero .estado {
+        font-size: 14px;
+      }
+      .hero.ligada .estado {
+        color: var(--ok);
+      }
+      .hero.desligada .estado {
+        color: var(--bad);
+      }
+      .hero .meta {
+        color: var(--muted);
+        font-size: 12.5px;
+        margin-top: 6px;
+      }
+      .btn-ia {
+        flex: none;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border-radius: 50%;
+        display: inline-grid;
+        place-items: center;
+        border: 1.5px solid var(--line);
+        background: var(--surface-2);
+        transition: background 0.15s, border-color 0.15s, color 0.15s, filter 0.15s;
+      }
+      .btn-ia svg {
+        width: 22px;
+        height: 22px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .btn-ia.ligada {
+        color: var(--ok);
+        background: var(--ok-soft);
+        border-color: var(--ok);
+      }
+      .btn-ia.desligada {
+        color: var(--bad);
+        background: var(--bad-soft);
+        border-color: var(--bad);
+      }
+      .btn-ia:hover:not(:disabled) {
+        filter: brightness(1.15);
+      }
+      .btn-ia:disabled {
+        opacity: 0.6;
+        cursor: wait;
+      }
+
+      /* números */
+      .numeros {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+      }
+      .icone-ia {
+        flex: none;
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        padding: 0;
+        display: inline-grid;
+        place-items: center;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        transition: filter 0.15s;
+      }
+      .icone-ia svg {
+        width: 18px;
+        height: 18px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2.2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .icone-ia.on {
+        color: var(--ok);
+        background: var(--ok-soft);
+        border-color: var(--ok);
+      }
+      .icone-ia.off {
+        color: var(--bad);
+        background: var(--bad-soft);
+        border-color: var(--bad);
+      }
+      .icone-ia.neutro {
+        color: var(--muted);
+      }
+      .acoes {
+        display: flex;
+        gap: 8px;
+        flex: none;
+      }
+      .icone-ia:hover:not(:disabled) {
+        filter: brightness(1.2);
+      }
+      .ajuda {
+        color: var(--muted);
+        font-size: 13px;
+        margin: -6px 0 12px;
+      }
+      .modo {
+        font-size: 13.5px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: var(--gold-soft);
+        color: var(--gold);
+        margin-bottom: 14px;
+      }
+      .config {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+      }
+      .config label {
+        display: grid;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      select {
+        font: inherit;
+        color: var(--fg);
+        background: var(--surface-2);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 12px;
+        width: 100%;
+      }
+      select:focus-visible {
+        outline: 2px solid var(--gold);
+        outline-offset: 2px;
+      }
+      .salvo {
+        border-color: var(--ok) !important;
+      }
+      .listas {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      .listas h3 {
+        font-size: 14px;
+        margin-bottom: 4px;
+      }
+      .adicionar {
+        display: grid;
+        grid-template-columns: 1.3fr 1fr auto;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .adicionar input {
+        padding: 8px 10px;
+        font-size: 14px;
+        min-width: 0;
+      }
+      .btn.x {
+        padding: 2px 9px;
+        line-height: 1.3;
+        color: var(--bad);
+        background: var(--bad-soft);
+        border-color: var(--bad);
+      }
+      .btn.x:hover {
+        background: var(--bad-soft);
+        filter: brightness(1.2);
+      }
+      .adicionar .btn-icone {
+        align-self: center;
+      }
+      body.ver-tecnico .numeros.cinco {
+        grid-template-columns: repeat(5, 1fr);
+      }
+      .numero {
+        padding: 16px 18px;
+        min-width: 0;
+      }
+      .numero .valor {
+        font-size: 30px;
+        font-weight: 700;
+        line-height: 1.1;
+        font-variant-numeric: tabular-nums;
+      }
+      .numero .rotulo {
+        color: var(--muted);
+        font-size: 13px;
+        margin-top: 4px;
+      }
+      .numero.alerta .valor {
+        color: var(--warn);
+      }
+      .numero.erro .valor {
+        color: var(--bad);
+      }
+
+      /* listas */
+      .lista {
         display: grid;
         gap: 8px;
-        align-content: start;
       }
-      @media (max-width: 700px) {
-        #app {
+      .linha {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px;
+        background: var(--surface-2);
+        border-radius: 12px;
+      }
+      .linha .principal {
+        flex: 1;
+        min-width: 0;
+      }
+      .linha .titulo {
+        font-weight: 600;
+        overflow-wrap: anywhere;
+      }
+      .linha .sub {
+        color: var(--muted);
+        font-size: 12.5px;
+        overflow-wrap: anywhere;
+      }
+      .vazio {
+        color: var(--muted);
+        font-size: 14px;
+        padding: 6px 2px;
+      }
+      .selo {
+        font-size: 12px;
+        font-weight: 600;
+        padding: 2px 9px;
+        border-radius: 999px;
+        white-space: nowrap;
+      }
+      .selo.ok {
+        color: var(--ok);
+        background: var(--ok-soft);
+      }
+      .selo.warn {
+        color: var(--warn);
+        background: var(--warn-soft);
+      }
+      .selo.bad {
+        color: var(--bad);
+        background: var(--bad-soft);
+      }
+      .selo.gold {
+        color: var(--gold);
+        background: var(--gold-soft);
+      }
+      .quando {
+        color: var(--muted);
+        font-size: 12.5px;
+        white-space: nowrap;
+      }
+      .rodape {
+        color: var(--muted);
+        font-size: 12.5px;
+        text-align: center;
+        padding-top: 4px;
+      }
+
+      @media (max-width: 760px) {
+        .grade {
           grid-template-columns: 1fr;
         }
-        #lista {
-          max-height: 35vh;
-          border-right: 0;
-          border-bottom: 1px solid var(--line);
+        .numeros,
+        body.ver-tecnico .numeros.cinco {
+          grid-template-columns: 1fr 1fr;
         }
-        .msg {
-          max-width: 90%;
+        .topo {
+          padding: 14px;
+          gap: 8px;
         }
+        .marca h1 {
+          font-size: 15px;
+          white-space: nowrap;
+        }
+        .ia-topo {
+          gap: 10px;
+        }
+        .linha {
+          flex-wrap: wrap;
+        }
+        .linha .principal {
+          flex: 1 1 160px;
+        }
+        .hero h2 {
+          font-size: 17px;
+        }
+        .listas {
+          grid-template-columns: 1fr;
+        }
+
       }
     </style>
   </head>
   <body>
-    <header>
-      <img src="../logo.png" alt="" width="32" height="32" />
-      <h1>Conversas do salão</h1>
-      <button id="btnFalhas" class="oculto">Falhas de envio</button>
-      <button id="btnSair" class="oculto">Sair</button>
+    <header class="topo">
+      <div id="marcaLogin" class="ia-topo">
+        <img src="../logo.png" alt="" width="40" height="40" />
+        <div class="marca">
+          <h1>Painel IA</h1>
+        </div>
+      </div>
+      <div id="iaTopo" class="ia-topo oculto">
+        <button id="iaChave" class="btn-ia" aria-pressed="false" aria-label="IA" disabled></button>
+        <div class="marca">
+          <h1>IA Novas Conversas</h1>
+          <p id="iaMeta" class="meta"></p>
+        </div>
+      </div>
+      <div class="acoes">
+        <button id="btnOlho" class="btn btn-icone olho oculto" title="Mostrar informações técnicas" aria-label="Informações técnicas" aria-pressed="false">
+          <svg class="aberto" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>
+          <svg class="fechado" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18" /><path d="M10.6 5.1A10.5 10.5 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.1" /><path d="M6.6 6.6A17.5 17.5 0 0 0 2 12s3.6 7 10 7a10 10 0 0 0 4.4-1" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></svg>
+        </button>
+        <button id="btnAtualizar" class="btn btn-icone atualizar oculto" title="Atualizar" aria-label="Atualizar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9" /><path d="M20 4v5h-5" /></svg>
+        </button>
+        <button id="btnSair" class="btn btn-icone sair oculto" title="Sair" aria-label="Sair">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3" /><path d="M16 8l4 4-4 4" /><path d="M20 12H9" /></svg>
+        </button>
+      </div>
     </header>
 
     <form id="login">
-      <input
-        id="email"
-        type="email"
-        placeholder="e-mail"
-        required
-        autocomplete="username"
-      />
-      <input
-        id="senha"
-        type="password"
-        placeholder="senha"
-        required
-        autocomplete="current-password"
-      />
-      <button>Entrar</button>
-      <p id="erroLogin" class="alerta"></p>
+      <h2>Entrar</h2>
+      <input id="email" type="email" placeholder="e-mail" required autocomplete="username" />
+      <input id="senha" type="password" placeholder="senha" required autocomplete="current-password" />
+      <button class="btn ouro">Entrar</button>
+      <p id="erroLogin"></p>
     </form>
 
-    <div id="app" class="oculto">
-      <nav id="lista"></nav>
-      <section id="conversa">
-        <div id="topo"><strong>Escolha uma conversa</strong></div>
-        <div id="msgs"></div>
-        <form id="envio" class="oculto">
-          <textarea
-            id="texto"
-            placeholder="Responder como humana (pausa o bot desta conversa)"
-          ></textarea>
-          <button>Enviar</button>
-        </form>
-        <div id="falhas" class="oculto"></div>
-        <div id="servicos" class="oculto"></div>
-      </section>
-    </div>
+    <main id="app" class="oculto">
+      <section class="numeros" id="numeros"></section>
 
-    <script
-      src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"
-      integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK"
-      crossorigin="anonymous"
-    ></script>
+      <section class="card">
+        <h2><svg id="avisoConversas" class="aviso-icone oculto" viewBox="0 0 24 24" role="img" aria-label="Conversas esperando por você"><title>Conversas esperando por você</title><path d="M12 3.5 22 20.5H2L12 3.5z" /><path d="M12 10v4.5" /><path d="M12 17.6h.01" /></svg>Conversas <span id="conversasN" class="contagem"></span><span id="ativasN" class="contagem ok"></span><span id="pausadasN" class="contagem aviso"></span></h2>
+        <div id="conversas" class="lista"></div>
+      </section>
+
+      <section class="card tecnico">
+        <h2>Erros <span id="errosN" class="contagem"></span></h2>
+        <div id="erros" class="lista"></div>
+      </section>
+
+      <section class="card">
+        <h2>Agendamentos IA</h2>
+        <div id="agendamentos" class="lista"></div>
+      </section>
+
+      <section class="card tecnico">
+        <p id="modoLista" class="modo oculto"></p>
+        <div class="listas">
+          <div>
+            <h3>Lista teste</h3>
+            <div id="listaTeste" class="lista"></div>
+            <form id="formTeste" class="adicionar">
+              <input id="numTeste" inputmode="tel" placeholder="(11) 99999-9999" required />
+              <input id="nomeTeste" placeholder="Nome" maxlength="60" />
+              <button class="btn ouro btn-icone" title="Adicionar" aria-label="Adicionar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14" /><path d="M5 12h14" /></svg></button>
+            </form>
+          </div>
+          <div>
+            <h3>Não responder</h3>
+            <div id="listaFamiliar" class="lista"></div>
+            <form id="formFamiliar" class="adicionar">
+              <input id="numFamiliar" inputmode="tel" placeholder="(11) 99999-9999" required />
+              <input id="nomeFamiliar" placeholder="Nome" maxlength="60" />
+              <button class="btn ouro btn-icone" title="Adicionar" aria-label="Adicionar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14" /><path d="M5 12h14" /></svg></button>
+            </form>
+          </div>
+        </div>
+      </section>
+      <section class="card tecnico">
+        <h2>Ajustes da IA</h2>
+        <div class="config">
+          <label>Modelo
+            <select id="cfgModelo">
+              <option value="claude-sonnet-5-5">Sonnet 5.5</option>
+              <option value="claude-opus-5-5">Opus 5.5</option>
+              <option value="claude-haiku-5-5">Haiku 5.5</option>
+              <option value="claude-fable-5-1">Fable 5.1</option>
+            </select>
+          </label>
+          <label>Esforço
+            <select id="cfgEsforco">
+              <option value="low">Baixo</option>
+              <option value="medium">Médio</option>
+              <option value="high">Alto</option>
+            </select>
+          </label>
+          <label>Respostas por conversa/hora
+            <input id="cfgConvHora" type="number" min="1" max="200" step="1" />
+          </label>
+          <label>Respostas por dia (total)
+            <input id="cfgDia" type="number" min="1" max="5000" step="1" />
+          </label>
+        </div>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
     <script src="config.js"></script>
     <script src="painel.js"></script>
   </body>

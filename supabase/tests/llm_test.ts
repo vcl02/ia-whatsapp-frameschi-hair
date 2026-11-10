@@ -22,6 +22,10 @@ Deno.test("prompt contém só os dados configurados", () => {
   assertStringIncludes(s, SALAO.linkAgendamento!);
   assertStringIncludes(s, "Bruna Frameschi Hair");
   assertStringIncludes(s, "Nunca invente");
+  assertStringIncludes(s, "Seu nome é Lia");
+  assertStringIncludes(s, "parágrafos curtos, separados por uma linha em branco");
+  assertStringIncludes(s, "POR QUE está chamando a Bruna");
+  assertStringIncludes(s, "O sinal de 20% não é devolvido");
 });
 
 Deno.test("valida o formato da decisão", () => {
@@ -94,9 +98,9 @@ Deno.test("sem ferramentas, não oferece nenhuma e pede o nome se não houver pe
   assertStringIncludes((pedidos[0].system as Array<{ text: string }>)[1].text, "pergunte o nome");
 });
 
-Deno.test("limita o número de consultas por resposta", async () => {
+Deno.test("se o modelo ignora a última chamada sem ferramentas e insiste em consultar, dá erro (vai para humano)", async () => {
   const chamada = { stop_reason: "tool_use", content: [{ type: "tool_use", id: "t", name: "consultar_horarios", input: { servico_id: 1, data: "2026-11-10" } }] };
-  const { cliente } = clienteFalso([chamada, chamada, chamada, chamada, chamada, chamada]);
+  const { cliente } = clienteFalso(Array(9).fill(chamada));
   const atendente = new AtendenteClaude("x", () => new Date(), cliente);
   let erro = "";
   try {
@@ -107,6 +111,50 @@ Deno.test("limita o número de consultas por resposta", async () => {
   assertStringIncludes(erro, "stop_reason=tool_use");
 });
 
+Deno.test("proposta pendente entra no contexto da IA (o histórico não tem as chamadas de ferramenta)", async () => {
+  const { blocoContexto } = await import("../functions/_shared/llm.ts");
+  const t = new Date("2026-11-07T12:00:00Z");
+  assertStringIncludes(blocoContexto(t, "Ana", "Proposta pendente: Hidratação, 2026-11-11 às 09:00 com Bruna"), "Proposta pendente: Hidratação");
+  assertEquals(blocoContexto(t, "Ana").includes("Proposta pendente"), false);
+  const a = clienteFalso([respostaFinal("ok")]);
+  await new AtendenteClaude("x", () => t, a.cliente).responder([{ autor: "cliente", texto: "SIM" }], SERVICOS_COM_ID, SALAO, { contextoAgendamento: "Banho de Lua, 2026-11-10 às 09:00 com Bruna" });
+  assertStringIncludes((a.pedidos[0].system as Array<{ text: string }>)[1].text, "Banho de Lua, 2026-11-10 às 09:00 com Bruna");
+});
+
 Deno.test("prompt traz a equipe", () => {
   assertStringIncludes(montarSistema(SALAO, SERVICOS_TESTE), "Equipe: Alessandra faz manicure e pedicure");
+});
+
+Deno.test("modelo e esforço escolhidos no painel vão para a API; sem escolha, o padrão", async () => {
+  const a = clienteFalso([respostaFinal("ok"), respostaFinal("ok")]);
+  const atendente = new AtendenteClaude("x", () => new Date("2026-11-07T12:00:00Z"), a.cliente);
+  const hist = [{ autor: "cliente" as const, texto: "oi" }];
+  await atendente.responder(hist, SERVICOS_COM_ID, SALAO, { modelo: "claude-opus-5-5", esforco: "high" });
+  await atendente.responder(hist, SERVICOS_COM_ID, SALAO);
+  assertEquals([a.pedidos[0].model, (a.pedidos[0].output_config as { effort: string }).effort], ["claude-opus-5-5", "high"]);
+  assertEquals([a.pedidos[1].model, (a.pedidos[1].output_config as { effort: string }).effort], ["claude-sonnet-5-5", "medium"]);
+});
+
+Deno.test("esgotou as rodadas de ferramenta: última chamada sem ferramentas e a IA responde (não dá erro)", async () => {
+  const usoFerramenta = { stop_reason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "consultar_horarios", input: { servico_id: 5732343, data: "2026-11-10" } }] };
+  const a = clienteFalso([...Array(8).fill(usoFerramenta), respostaFinal("Qual serviço e qual dia você prefere?")]);
+  const atendente = new AtendenteClaude("x", () => new Date("2026-11-07T12:00:00Z"), a.cliente);
+  const chamadas: string[] = [];
+  const ferramentas = { definicoes: [DEF_CONSULTAR], executar: (n: string) => (chamadas.push(n), Promise.resolve("sem horários")) };
+  const d = await atendente.responder([{ autor: "cliente", texto: "agenda a progressiva" }], SERVICOS_COM_ID, SALAO, { ferramentas });
+  assertEquals(d.resposta, "Qual serviço e qual dia você prefere?");
+  assertEquals(chamadas.length, 8);
+  assertEquals(a.pedidos.length, 9);
+  assertEquals(a.pedidos[0].tool_choice, undefined);
+  assertEquals(a.pedidos[8].tool_choice, { type: "none" });
+  // o aviso de limite vai junto dos resultados da penúltima rodada
+  const ultimaMsg = (a.pedidos[8].messages as Array<{ content: Array<{ type: string; text?: string }> }>).at(-1)!;
+  assertStringIncludes(ultimaMsg.content.at(-1)!.text ?? "", "Limite de consultas atingido");
+});
+
+Deno.test("prompt: a IA não agenda; quem agenda é o sistema com o comprovante do Pix", () => {
+  const s = montarSistema(SALAO, SERVICOS_TESTE);
+  assertStringIncludes(s, "sinal de 20%");
+  assertStringIncludes(s, "Quem agenda é o sistema");
+  assertEquals(s.includes("confirmar_agendamento"), false);
 });

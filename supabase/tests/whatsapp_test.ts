@@ -98,17 +98,31 @@ Deno.test("envio de modelo com parâmetros no corpo", async () => {
   assertEquals(body.template.components[0].parameters.map((p: { text: string }) => p.text), ["a", "b"]);
 });
 
-Deno.test("lista de números permitidos (fase de testes)", async () => {
-  const { lerPermitidos, botPodeResponder } = await import("../functions/_shared/whatsapp.ts");
-  const p = lerPermitidos("+55 11 99999-0000, 5521888");
-  assertEquals(botPodeResponder(p, "5511999990000"), true);
-  assertEquals(botPodeResponder(p, "5511000000000"), false);
-  assertEquals(botPodeResponder(lerPermitidos(""), "qualquer"), true);
-  assertEquals(botPodeResponder(lerPermitidos(undefined), "qualquer"), true);
+const listas = (teste: string[], familiar: string[]) => ({ teste: new Set(teste), familiar: new Set(familiar) });
+
+Deno.test("normalizar número: só dígitos e 55 quando faltar", async () => {
+  const { normalizarNumero } = await import("../functions/_shared/whatsapp.ts");
+  assertEquals(normalizarNumero("(11) 99209-0474"), "5511992090474");
+  assertEquals(normalizarNumero("+55 11 99209-0474"), "5511992090474");
+  assertEquals(normalizarNumero("1133334444"), "551133334444");
 });
 
-Deno.test("filtro da fase de testes: nada de fora da lista passa (mensagem, eco, status)", async () => {
-  const { filtrarPorPermitidos, lerPermitidos } = await import("../functions/_shared/whatsapp.ts");
+Deno.test("quem a IA atende: lista de teste manda; vazia, vale todos menos familiares", async () => {
+  const { atendeNumero } = await import("../functions/_shared/whatsapp.ts");
+  // Sem listas: todo mundo.
+  assertEquals(atendeNumero(listas([], []), "5511000000000"), true);
+  // Só familiares: todos, menos eles.
+  assertEquals(atendeNumero(listas([], ["5511111111111"]), "5511111111111"), false);
+  assertEquals(atendeNumero(listas([], ["5511111111111"]), "5511222222222"), true);
+  // Com lista de teste: só quem está nela...
+  assertEquals(atendeNumero(listas(["5511992090474"], ["5511111111111"]), "5511992090474"), true);
+  assertEquals(atendeNumero(listas(["5511992090474"], ["5511111111111"]), "5511222222222"), false);
+  // ...e ela passa por cima de familiares.
+  assertEquals(atendeNumero(listas(["5511111111111"], ["5511111111111"]), "5511111111111"), true);
+});
+
+Deno.test("filtro por listas: o que a IA não atende não passa (mensagem, eco, status)", async () => {
+  const { filtrarPorListas } = await import("../functions/_shared/whatsapp.ts");
   const ev = lerEventos({
     entry: [{ changes: [
       { field: "messages", value: { metadata: { phone_number_id: PNID },
@@ -124,11 +138,24 @@ Deno.test("filtro da fase de testes: nada de fora da lista passa (mensagem, eco,
         message_echoes: [{ id: "e1", to: "5511888887777", timestamp: "1", type: "text", text: { body: "resposta pessoal" } }] } },
     ] }],
   }, PNID);
-  const { eventos, descartados } = filtrarPorPermitidos(ev, lerPermitidos("5511992090474"));
+  const { eventos, descartados } = filtrarPorListas(ev, listas(["5511992090474"], []));
   assertEquals(eventos.mensagens.map((m) => m.wamid), ["w1"]);
   assertEquals(eventos.statuses.map((s) => s.wamid), ["s1"]);
   assertEquals(eventos.ecos.length, 0);
   assertEquals(descartados, 3);
-  // Lista vazia (produção): mantém tudo.
-  assertEquals(filtrarPorPermitidos(ev, lerPermitidos("")).descartados, 0);
+  // Sem listas (produção aberta): mantém tudo.
+  assertEquals(filtrarPorListas(ev, listas([], [])).descartados, 0);
+  // Só familiares: some só o familiar.
+  assertEquals(filtrarPorListas(ev, listas([], ["5511888887777"])).eventos.mensagens.map((m) => m.wamid), ["w1"]);
+});
+
+Deno.test("reação a mensagem é ignorada (não grava nem chama humano); emoji digitado é texto", () => {
+  const ev = lerEventos(payload({
+    messages: [
+      { id: "wamid.r", from: "55", timestamp: "1", type: "reaction", reaction: { message_id: "wamid.x", emoji: "👍" } },
+      { id: "wamid.t", from: "55", timestamp: "2", type: "text", text: { body: "👍" } },
+    ],
+  }), PNID);
+  assertEquals(ev.mensagens.map((m) => m.texto), ["👍"]);
+  assertEquals(ev.ignorados, 1);
 });

@@ -5,9 +5,8 @@
 import { assinaturaValida } from "../_shared/assinatura.ts";
 import {
   enviarTexto,
-  filtrarPorPermitidos,
+  filtrarPorListas,
   lerEventos,
-  lerPermitidos,
   type ConfigWhatsApp,
 } from "../_shared/whatsapp.ts";
 import {
@@ -17,10 +16,15 @@ import {
   RepositorioPropostasSupabase,
   RepositorioSupabase,
 } from "../_shared/db.ts";
-import { ConsultaMinhaAgenda } from "../_shared/disponibilidade.ts";
+import {
+  ConsultaMinhaAgenda,
+  hojeSaoPaulo,
+} from "../_shared/disponibilidade.ts";
 import {
   AgendadorMinhaAgenda,
+  contextoDoAgendamento,
   montarFerramentas,
+  receberComprovante,
 } from "../_shared/agendamento.ts";
 import { processarMensagem, type DepsBot } from "../_shared/bot.ts";
 import {
@@ -31,6 +35,7 @@ import {
 } from "../_shared/aviso.ts";
 import { AtendenteClaude } from "../_shared/llm.ts";
 import { SALAO } from "../_shared/salao.ts";
+import { EVENTO_DE_ERRO, registrarEvento } from "../_shared/eventos.ts";
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 
@@ -45,7 +50,7 @@ function emSegundoPlano(p: Promise<unknown>) {
   return seguro;
 }
 
-export async function tratar(req: Request): Promise<Response> {
+async function tratarInterno(req: Request): Promise<Response> {
   const url = new URL(req.url);
 
   if (req.method === "GET") {
@@ -85,14 +90,29 @@ export async function tratar(req: Request): Promise<Response> {
     phoneNumberId: exigirEnv("SALAO_WHATSAPP_PHONE_NUMBER_ID"),
     graphApiVersion: exigirEnv("SALAO_GRAPH_API_VERSION"),
   };
-  // Fase de testes: se SALAO_SO_RESPONDER_PARA tiver números, nada de quem está
-  // fora da lista é gravado nem respondido (o número é de uso pessoal).
-  const { eventos, descartados } = filtrarPorPermitidos(
-    lerEventos(payload, wa.phoneNumberId),
-    lerPermitidos(Deno.env.get("SALAO_SO_RESPONDER_PARA")),
-  );
   const db = clienteServico();
   const repo = new RepositorioSupabase(db);
+  // Quem a IA atende vem das listas do painel (teste e familiares); quem ela não
+  // atende não é gravado nem respondido. Sem conseguir ler as listas, nada é respondido.
+  const listas = await repo.listasNumeros();
+  const { eventos, descartados } = filtrarPorListas(
+    lerEventos(payload, wa.phoneNumberId),
+    listas,
+  );
+  const iaLigadaParaNovas = await repo.iaAtiva();
+  const logar = (evento: string, dados: Record<string, unknown> = {}) => {
+    log(evento, dados);
+    if (!EVENTO_DE_ERRO.test(evento)) return;
+    emSegundoPlano(
+      Promise.resolve(
+        db
+          .from("salao_eventos")
+          .insert({ tipo: evento, detalhe: JSON.stringify(dados).slice(0, 500) }),
+      ).then(({ error }) => {
+        if (error) log("falha_gravar_evento", { erro: String(error.message) });
+      }),
+    );
+  };
   // Consulta e agendamento no Minha Agenda: só ligam com a chave do Firebase configurada.
   // O agendamento pode ser desligado à parte com SALAO_AGENDAR=nao.
   const chaveFirebase = Deno.env.get("SALAO_MA_FIREBASE_KEY");
@@ -102,13 +122,32 @@ export async function tratar(req: Request): Promise<Response> {
   const agendarLigado =
     !!chaveFirebase && Deno.env.get("SALAO_AGENDAR") !== "nao";
   const aviso = lerConfigAviso((n) => Deno.env.get(n));
+  const avisarResumo = (assunto: string, texto: string) =>
+    enviarResumo(
+      aviso,
+      { enviarEmail: (cfg, e) => enviarEmailResend(cfg, e), log },
+      assunto,
+      texto,
+    );
+  const agendador = agendarLigado
+    ? new AgendadorMinhaAgenda(chaveFirebase!)
+    : undefined;
+  const propostas = agendarLigado
+    ? new RepositorioPropostasSupabase(db)
+    : undefined;
+  // Chave Pix do sinal (secrets do Supabase). Sem elas a IA não propõe agendamento.
+  const chavePix = Deno.env.get("SALAO_PIX_CHAVE");
+  const titularPix = Deno.env.get("SALAO_PIX_TITULAR");
+  const pix =
+    chavePix && titularPix ? { chave: chavePix, titular: titularPix } : undefined;
 
   for (const s of eventos.statuses) {
     await repo.registrarStatus(s);
     if (s.status === "failed")
-      log("status_falha", { wamid: s.wamid, erros: s.erros });
+      logar("status_falha", { wamid: s.wamid, erros: s.erros });
   }
-  for (const e of eventos.ecos) await repo.registrarEco(e);
+  for (const e of eventos.ecos)
+    await repo.registrarEco(e, listas.teste.has(e.para));
 
   const deps: DepsBot = {
     repo,
@@ -127,28 +166,55 @@ export async function tratar(req: Request): Promise<Response> {
       ? (ctx) =>
           montarFerramentas(ctx, {
             consulta,
-            agendador: agendarLigado
-              ? new AgendadorMinhaAgenda(chaveFirebase!)
-              : undefined,
-            propostas: agendarLigado
-              ? new RepositorioPropostasSupabase(db)
-              : undefined,
-            avisar: (assunto, texto) =>
-              enviarResumo(
-                aviso,
-                { enviarEmail: (cfg, e) => enviarEmailResend(cfg, e), log },
-                assunto,
-                texto,
-              ),
-            log,
+            agendador,
+            propostas,
+            pix,
+            avisar: avisarResumo,
+            log: logar,
             maxDias: 15, // o agendamento online abre até 15 dias à frente (Minha Agenda)
           })
       : undefined,
-    log,
+    receberComprovante:
+      consulta && agendador && propostas
+        ? (c, m) =>
+            receberComprovante(
+              { conversaId: c.id, waId: c.waId },
+              {
+                consulta,
+                agendador,
+                propostas,
+                avisar: avisarResumo,
+                log: logar,
+                semLimiteDiario: listas.teste.has(c.waId),
+              },
+              m.tipo,
+            )
+        : undefined,
+    contextoAgendamento: propostas
+      ? (conversaId) =>
+          contextoDoAgendamento(
+            propostas,
+            conversaId,
+            new Date(),
+            (ms) => new Promise((r) => setTimeout(r, ms)),
+          )
+      : undefined,
+    registrarPedidoCancelamento: propostas
+      ? (conversaId) =>
+          propostas.marcarCancelamentoPedido(
+            conversaId,
+            hojeSaoPaulo(new Date()),
+          )
+      : undefined,
+    log: logar,
   };
 
   for (const m of eventos.mensagens) {
-    const { conversaId, nova } = await repo.registrarEntrada(m);
+    const { conversaId, nova } = await repo.registrarEntrada(
+      m,
+      iaLigadaParaNovas,
+      listas.teste.has(m.waId),
+    );
     if (!nova) continue; // reenvio da Meta: já tratado
     emSegundoPlano(
       processarMensagem(deps, conversaId, m).then((r) =>
@@ -165,4 +231,19 @@ export async function tratar(req: Request): Promise<Response> {
     fora_da_lista: descartados,
   });
   return new Response("ok", { status: 200 });
+}
+
+/** Quebra geral (falta de secret, banco fora do ar etc.): registra no painel e deixa o erro subir (a Meta reenvia). */
+export async function tratar(req: Request): Promise<Response> {
+  try {
+    return await tratarInterno(req);
+  } catch (e) {
+    log("erro_funcao_webhook", { erro: String(e) });
+    try {
+      await registrarEvento(clienteServico(), "erro_funcao_webhook", {
+        erro: String(e),
+      });
+    } catch { /* sem banco ou sem env: o log acima já registrou */ }
+    throw e;
+  }
 }

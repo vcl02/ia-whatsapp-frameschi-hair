@@ -4,6 +4,6 @@
 [functions.salao-webhook]
 verify_jwt = false
 
-# A tela chama com o JWT do usuário logado; a função ainda confere salao_equipe.
+# Desativada (responde 410): o envio é pelo app do WhatsApp.
 [functions.salao-responder]
 verify_jwt = true

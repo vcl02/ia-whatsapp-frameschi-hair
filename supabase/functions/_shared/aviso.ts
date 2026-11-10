@@ -52,7 +52,7 @@ export function montarEmail(
     texto:
       `Uma conversa no WhatsApp do salão precisa de atendimento humano.\n\n` +
       `Cliente: ${cliente}\nMotivo: ${motivo}\n\n` +
-      `O bot desta conversa está pausado. Responda pela tela de conversas ou pelo app do WhatsApp Business.`,
+      `A IA desta conversa está pausada. Responda pelo app do WhatsApp Business e, quando quiser, clique em "Retomar IA" no painel.`,
   };
 }
 

@@ -3,15 +3,32 @@
 import { createClient, type SupabaseClient } from "./deps.ts";
 import type {
   EcoEnviado,
+  ListasNumeros,
   MensagemRecebida,
   ResultadoEnvio,
   StatusRecebido,
 } from "./whatsapp.ts";
 import type { Servico } from "./salao.ts";
 import type { Conversa, Repositorio } from "./bot.ts";
-import type { ItemHistorico } from "./llm.ts";
+import {
+  CONFIG_PADRAO,
+  ESFORCOS_PERMITIDOS,
+  MODELOS_PERMITIDOS,
+  type ConfigIA,
+  type Esforco,
+  type ItemHistorico,
+} from "./llm.ts";
 import type { ArmazemSessao, Sessao } from "./disponibilidade.ts";
-import type { Proposta, RepositorioPropostas } from "./agendamento.ts";
+import {
+  resumoDoAgendamento,
+  type Proposta,
+  type PropostaRecente,
+  type RepositorioPropostas,
+} from "./agendamento.ts";
+import type {
+  PropostaParaLembrete,
+  RepositorioLembretes,
+} from "./lembrete.ts";
 
 export function clienteServico(): SupabaseClient {
   return createClient(
@@ -37,10 +54,25 @@ function checar<T>(r: { data: T; error: unknown }): T {
 export class RepositorioSupabase implements Repositorio {
   constructor(private db: SupabaseClient) {}
 
-  /** Grava a mensagem recebida. `nova` = false quando a Meta reenviou a mesma. */
+  /**
+   * Grava a mensagem recebida. `nova` = false quando a Meta reenviou a mesma.
+   * Conversa nova nasce com a IA pausada se o botão geral estiver desligado
+   * (`iaLigadaParaNovas`); conversa que já existe nunca é afetada por ele.
+   * Número de teste com a IA pausada: a mensagem fica fora do contexto da IA.
+   */
   async registrarEntrada(
     m: MensagemRecebida,
+    iaLigadaParaNovas = true,
+    numeroDeTeste = false,
   ): Promise<{ conversaId: string; nova: boolean }> {
+    const existente = checar(
+      await this.db
+        .from("salao_conversas")
+        .select("id, bot_pausado")
+        .eq("wa_id", m.waId)
+        .maybeSingle(),
+    ) as { id: string; bot_pausado: boolean } | null;
+    const pausada = existente ? existente.bot_pausado : !iaLigadaParaNovas;
     const conversa = checar(
       await this.db
         .from("salao_conversas")
@@ -50,6 +82,7 @@ export class RepositorioSupabase implements Repositorio {
             ...(m.nomePerfil ? { nome_perfil: m.nomePerfil } : {}),
             ultimo_inbound_em: m.recebidaEm.toISOString(),
             atualizado_em: new Date().toISOString(),
+            ...(existente ? {} : { bot_pausado: !iaLigadaParaNovas }),
           },
           { onConflict: "wa_id" },
         )
@@ -68,6 +101,7 @@ export class RepositorioSupabase implements Repositorio {
             wamid: m.wamid,
             tipo: m.tipo,
             texto: m.texto,
+            fora_contexto: numeroDeTeste && pausada,
             criado_em: m.recebidaEm.toISOString(),
           },
           { onConflict: "wamid", ignoreDuplicates: true },
@@ -95,23 +129,100 @@ export class RepositorioSupabase implements Repositorio {
     );
   }
 
+  /**
+   * Botão geral da IA (vale só para conversas novas). Se a tabela ainda não
+   * existir, segue ligada; qualquer outro erro propaga e nada é respondido.
+   */
+  async iaAtiva(): Promise<boolean> {
+    const { data, error } = await this.db
+      .from("salao_controle")
+      .select("ia_ativa")
+      .eq("id", 1)
+      .maybeSingle();
+    if (error) {
+      const code = (error as { code?: string }).code;
+      if (code === "42P01" || code === "PGRST205") return true;
+      throw error;
+    }
+    return data?.ia_ativa !== false;
+  }
+
+  /**
+   * Modelo, esforço e limites do painel. Valor desconhecido ou migration ainda
+   * não aplicada: usa o padrão (sem derrubar o atendimento).
+   */
+  async config(): Promise<ConfigIA> {
+    const { data, error } = await this.db
+      .from("salao_controle")
+      .select("modelo, esforco, limite_conversa_hora, limite_global_dia")
+      .eq("id", 1)
+      .maybeSingle();
+    if (error || !data) return CONFIG_PADRAO;
+    const r = data as {
+      modelo: string;
+      esforco: string;
+      limite_conversa_hora: number;
+      limite_global_dia: number;
+    };
+    return {
+      modelo: (MODELOS_PERMITIDOS as readonly string[]).includes(r.modelo)
+        ? r.modelo
+        : CONFIG_PADRAO.modelo,
+      esforco: (ESFORCOS_PERMITIDOS as readonly string[]).includes(r.esforco)
+        ? (r.esforco as Esforco)
+        : CONFIG_PADRAO.esforco,
+      limiteConversaHora:
+        Number(r.limite_conversa_hora) || CONFIG_PADRAO.limiteConversaHora,
+      limiteGlobalDia:
+        Number(r.limite_global_dia) || CONFIG_PADRAO.limiteGlobalDia,
+    };
+  }
+
+  /** Listas de teste e de familiares (tabela salao_numeros, editada no painel). */
+  async listasNumeros(): Promise<ListasNumeros> {
+    const { data, error } = await this.db
+      .from("salao_numeros")
+      .select("wa_id, lista");
+    if (error) {
+      // Migration ainda não aplicada: mantém o comportamento anterior (secret), sem derrubar o webhook.
+      const code = (error as { code?: string }).code;
+      if (code === "42P01" || code === "PGRST205") {
+        const antigos = (Deno.env.get("SALAO_SO_RESPONDER_PARA") ?? "")
+          .split(",")
+          .map((s) => s.replace(/\D/g, ""))
+          .filter(Boolean);
+        return { teste: new Set(antigos), familiar: new Set() };
+      }
+      throw error;
+    }
+    const r = data as { wa_id: string; lista: string }[];
+    return {
+      teste: new Set(r.filter((x) => x.lista === "teste").map((x) => x.wa_id)),
+      familiar: new Set(
+        r.filter((x) => x.lista === "familiar").map((x) => x.wa_id),
+      ),
+    };
+  }
+
   async conversa(id: string): Promise<Conversa> {
     const r = checar(
       await this.db
         .from("salao_conversas")
-        .select("id, wa_id, nome_perfil, bot_pausado")
+        .select("id, wa_id, nome_perfil, nome_cliente, bot_pausado")
         .eq("id", id)
         .single(),
     ) as {
       id: string;
       wa_id: string;
       nome_perfil: string | null;
+      nome_cliente: string | null;
       bot_pausado: boolean;
     };
     return {
       id: r.id,
       waId: r.wa_id,
-      nomePerfil: r.nome_perfil,
+      // o nome editado no painel vale mais que o do perfil do WhatsApp
+      nomePerfil: r.nome_cliente ?? r.nome_perfil,
       botPausado: r.bot_pausado,
     };
   }
@@ -176,7 +287,7 @@ export class RepositorioSupabase implements Repositorio {
    * Mensagem enviada pelo app do celular (coexistência): registra como humana
    * e pausa o bot, porque alguém assumiu a conversa.
    */
-  async registrarEco(e: EcoEnviado): Promise<void> {
+  async registrarEco(e: EcoEnviado, numeroDeTeste = false): Promise<void> {
     // Se o wamid já existe, a mensagem foi enviada por nós (bot ou tela): ignora.
     const ja = checar(
       await this.db
@@ -210,6 +321,7 @@ export class RepositorioSupabase implements Repositorio {
           tipo: e.tipo,
           texto: e.texto,
           status: "enviada_pelo_app",
+          fora_contexto: numeroDeTeste,
           criado_em: e.enviadaEm.toISOString(),
         },
         { onConflict: "wamid", ignoreDuplicates: true },
@@ -239,6 +351,7 @@ export class RepositorioSupabase implements Repositorio {
         .from("salao_mensagens")
         .select("autor, texto, tipo")
         .eq("conversa_id", conversaId)
+        .eq("fora_contexto", false)
         .order("criado_em", { ascending: false })
         .limit(limite),
     ) as {
@@ -352,6 +465,9 @@ type LinhaAgendamento = {
   nome_cliente: string;
   expira_em: string;
   criado_em: string;
+  status?: string;
+  atualizado_em?: string;
+  remarcado_de?: string | null;
 };
 
 function paraProposta(r: LinhaAgendamento): Proposta {
@@ -368,6 +484,7 @@ function paraProposta(r: LinhaAgendamento): Proposta {
     nomeCliente: r.nome_cliente,
     expiraEm: new Date(r.expira_em).getTime(),
     criadoEm: new Date(r.criado_em).getTime(),
+    remarcadoDe: r.remarcado_de ?? null,
   };
 }
 
@@ -408,6 +525,23 @@ export class RepositorioPropostasSupabase implements RepositorioPropostas {
     return paraProposta(r);
   }
 
+  async recente(conversaId: string): Promise<PropostaRecente | null> {
+    const r = checar(
+      await this.db
+        .from("salao_agendamentos")
+        .select("*")
+        .eq("conversa_id", conversaId)
+        .order("criado_em", { ascending: false })
+        .limit(1),
+    ) as LinhaAgendamento[];
+    if (!r[0]) return null;
+    return {
+      ...paraProposta(r[0]),
+      status: r[0].status ?? "",
+      atualizadoEm: new Date(r[0].atualizado_em ?? r[0].criado_em).getTime(),
+    };
+  }
+
   async pendente(conversaId: string): Promise<Proposta | null> {
     const r = checar(
       await this.db
@@ -442,6 +576,78 @@ export class RepositorioPropostasSupabase implements RepositorioPropostas {
     return r.length > 0;
   }
 
+  async agendadoAtivo(
+    conversaId: string,
+    hoje: string,
+  ): Promise<Proposta | null> {
+    const r = checar(
+      await this.db
+        .from("salao_agendamentos")
+        .select("*")
+        .eq("conversa_id", conversaId)
+        .eq("status", "agendado")
+        .is("cancelamento_pedido_em", null)
+        .gte("data", hoje)
+        .order("atualizado_em", { ascending: false })
+        .limit(1),
+    ) as LinhaAgendamento[];
+    return r[0] ? paraProposta(r[0]) : null;
+  }
+
+  async marcarCancelamentoPedido(
+    conversaId: string,
+    hoje: string,
+  ): Promise<string | null> {
+    const ativo = await this.agendadoAtivo(conversaId, hoje);
+    if (!ativo) return null;
+    checar(
+      await this.db
+        .from("salao_agendamentos")
+        .update({ cancelamento_pedido_em: new Date().toISOString() })
+        .eq("id", ativo.id),
+    );
+    return resumoDoAgendamento(ativo);
+  }
+
+  async registrarRemarcacao(
+    antigo: Proposta,
+    novo: Omit<Proposta, "id" | "criadoEm" | "expiraEm" | "remarcadoDe">,
+  ): Promise<Proposta> {
+    const agora = new Date().toISOString();
+    const r = checar(
+      await this.db
+        .from("salao_agendamentos")
+        .insert({
+          conversa_id: novo.conversaId,
+          servico_origem_id: novo.servicoId,
+          servico_nome: novo.servicoNome,
+          profissional_id: novo.profissionalId,
+          profissional_nome: novo.profissionalNome,
+          data: novo.data,
+          hora: novo.hora,
+          preco: novo.preco,
+          nome_cliente: novo.nomeCliente,
+          status: "agendado",
+          detalhe: "remarcação (sinal do agendamento anterior)",
+          expira_em: agora,
+          remarcado_de: antigo.id,
+        })
+        .select("*")
+        .single(),
+    ) as LinhaAgendamento;
+    checar(
+      await this.db
+        .from("salao_agendamentos")
+        .update({
+          cancelamento_pedido_em: agora,
+          detalhe: "remarcado: cancelar este horário no Minha Agenda",
+          atualizado_em: agora,
+        })
+        .eq("id", antigo.id),
+    );
+    return paraProposta(r);
+  }
+
   async agendadosDesde(conversaId: string, desde: Date): Promise<number> {
     const { count, error } = await this.db
       .from("salao_agendamentos")
@@ -451,5 +657,75 @@ export class RepositorioPropostasSupabase implements RepositorioPropostas {
       .gte("atualizado_em", desde.toISOString());
     if (error) throw error;
     return count ?? 0;
+  }
+}
+
+/** Propostas aguardando comprovante, para os lembretes a cada 7 minutos. */
+export class LembretesSupabase implements RepositorioLembretes {
+  constructor(private db: SupabaseClient) {}
+
+  async listar(): Promise<PropostaParaLembrete[]> {
+    const r = checar(
+      await this.db
+        .from("salao_agendamentos")
+        .select(
+          "id, conversa_id, nome_cliente, servico_nome, data, hora, preco, criado_em, expira_em, lembretes, salao_conversas(wa_id, bot_pausado)",
+        )
+        .eq("status", "proposto")
+        .gt("expira_em", new Date(Date.now() - 60 * 60_000).toISOString()),
+    ) as Array<
+      LinhaAgendamento & {
+        lembretes: number;
+        salao_conversas:
+          | { wa_id: string; bot_pausado: boolean }
+          | Array<{ wa_id: string; bot_pausado: boolean }>
+          | null;
+      }
+    >;
+    return r.flatMap((x) => {
+      const c = Array.isArray(x.salao_conversas)
+        ? x.salao_conversas[0]
+        : x.salao_conversas;
+      if (!c) return [];
+      return [
+        {
+          id: x.id,
+          conversaId: x.conversa_id,
+          waId: c.wa_id,
+          botPausado: c.bot_pausado,
+          nomeCliente: x.nome_cliente,
+          servicoNome: x.servico_nome,
+          data: x.data,
+          hora: x.hora,
+          preco: x.preco,
+          criadoEm: new Date(x.criado_em).getTime(),
+          expiraEm: new Date(x.expira_em).getTime(),
+          lembretes: Number(x.lembretes),
+        },
+      ];
+    });
+  }
+
+  /** Marca o lembrete como enviado antes de mandar; false se outra execução já pegou. */
+  async reservar(
+    id: string,
+    atual: number,
+    expirar = false,
+  ): Promise<boolean> {
+    const r = checar(
+      await this.db
+        .from("salao_agendamentos")
+        .update({
+          lembretes: atual + 1,
+          ...(expirar
+            ? { status: "expirado", atualizado_em: new Date().toISOString() }
+            : {}),
+        })
+        .eq("id", id)
+        .eq("lembretes", atual)
+        .eq("status", "proposto")
+        .select("id"),
+    ) as unknown[];
+    return r.length > 0;
   }
 }

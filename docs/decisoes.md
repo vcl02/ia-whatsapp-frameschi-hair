@@ -107,7 +107,7 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
 - Equipe no prompt: Alessandra (manicure e pedicure), Bruna (cabelo, massagem e
   o resto).
 
-## 2026-11-07 — Agendamento pelo bot (com confirmação da cliente)
+## 2026-11-07 — Agendamento pelo bot (com confirmação da cliente; confirmação por "SIM" substituída em 2026-11-08, veja abaixo)
 - Bruna de acordo; aviso por e-mail ao Victor a cada agendamento.
 - Duas etapas: `propor_agendamento` confere a vaga (sem cache) e grava uma
   proposta em `salao_agendamentos` (vale 10 min; nova proposta substitui a
@@ -119,6 +119,97 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
   (decisão do Victor) e o telefone da conversa, como se a cliente agendasse
   pelo site. Comentário: "Agendado pelo assistente virtual do WhatsApp".
 - Limite: 1 agendamento pelo bot por conversa a cada 24 h. Remarcar/cancelar:
-  humano (o Minha Agenda não deixa a cliente cancelar sozinha).
+  humano (ver a investigação de 2026-11-08 abaixo: a API de cancelamento existe, mas o
+  salão desligou o cancelamento pela cliente).
 - Falha no agendamento => link + passar para humano. `SALAO_AGENDAR=nao`
   desliga só o agendamento.
+
+## 2026-11-08 — Sinal de 20% por Pix confirma o agendamento (substitui o "SIM")
+- Pedido do Victor: em vez de "SIM", a cliente paga 20% por Pix e manda o
+  comprovante; o sistema NÃO lê o comprovante, só vê que chegou imagem ou PDF.
+- `propor_agendamento` grava a proposta (agora vale **30 min**) e devolve resumo,
+  valor do sinal e chave Pix para a IA mandar. A IA não tem mais ferramenta para
+  agendar (`confirmar_agendamento` e `ehConfirmacao` foram removidos): quem agenda
+  é `receberComprovante` (código), quando chega `image` ou `document` numa
+  conversa com proposta pendente.
+- Sinal = 20% do preço; "a partir de" usa o valor mínimo e a IA avisa que a Bruna
+  confirma o valor final. Sem valor legível ou sem chave Pix configurada: não
+  propõe, chama a Bruna.
+- Chave Pix e titular ficam em secrets do Supabase (`SALAO_PIX_CHAVE`,
+  `SALAO_PIX_TITULAR`), não no repositório.
+- Limite conhecido: qualquer imagem/PDF conta. A Bruna precisa conferir o Pix no
+  banco; o e-mail de cada agendamento pede isso. A IA nunca diz "pagamento
+  confirmado".
+- Prazo vencido, horário ocupado, erro, ou 2º agendamento no dia: o comprovante
+  vai para a equipe (pode ter dinheiro envolvido). Segundo comprovante logo depois
+  de agendar é ignorado. Imagem sem proposta pendente continua chamando a equipe.
+- Reconsulta a vaga ao propor e de novo ao receber o comprovante.
+- Lembrete (pedido do Victor): enquanto a proposta espera o comprovante, a cliente
+  recebe um lembrete fixo (sem IA) aos 7, 14, 21 e 28 minutos, dizendo que sem o
+  comprovante o horário não é agendado. Função `salao-lembrete`, chamada a cada
+  minuto pelo pg_cron; o contador `lembretes` é gravado antes de enviar (chamada
+  repetida não duplica). Conversa com a IA pausada não recebe.
+- Resposta em duplicidade (comprovante seguido de texto): o contexto da IA agora
+  diz quando o sistema acabou de agendar (até 3 min) e espera o comprovante em
+  processamento terminar; "resposta" vazia sem passar para humano não envia nada.
+- Fim da reserva: se os 30 min passam sem comprovante, a proposta vira "expirado" e a
+  cliente recebe um último aviso de que o horário não foi agendado (só se a IA da
+  conversa não estiver pausada).
+- Parágrafos (2026-11-08): a regra de "um único parágrafo" foi revertida a pedido do
+  Victor. A IA volta a dividir em parágrafos curtos, e a apresentação da primeira
+  resposta e a explicação de por que chama a Bruna ficam em parágrafo próprio.
+
+## 2026-11-08 — Cancelamento: investigação da API e cancelamento assistido
+- Lido no código do site online.maapp.com.br (bundle público, só leitura):
+  `PUT /currentUser/appointments/cancel` com `{appointmentId, comments}` e
+  `GET /currentUser/appointments?notFulfilled=&pageNumber=` (lista do usuário logado).
+  O botão "Cancelar Agendamento" do site só aparece se `companyInfo.allowSelfCancel`
+  for verdadeiro (ou houver pagamento antecipado). No perfil da Bruna hoje:
+  `allowSelfCancel = false`, `cancellationAdvanceTimeMinutes = 120` e a política em
+  texto diz "Cancelamentos em no máximo 24 horas antes".
+- NÃO verificado: se o servidor também recusa o cancelamento quando `allowSelfCancel` é
+  falso (nenhuma chamada de cancelamento foi feita). Cancelar exigiria o login do
+  mesmo usuário que agendou; hoje cada agendamento usa um login anônimo novo e ele é
+  descartado, e a resposta do POST de agendamento só é conferida por `status = CREATED`
+  (o site lê `appointments` na resposta; o formato real não foi visto).
+- Decisão: cancelamento assistido, sem cancelar no Minha Agenda. Com agendamento ativo
+  (futuro), a IA confirma qual horário, explica a política, diz que a Bruna cancela e
+  decide sobre o sinal (nunca promete devolução) e passa para a Bruna. O sistema marca o
+  agendamento (`cancelamento_pedido_em`) e põe o resumo dele no aviso por e-mail; o
+  painel mostra "Cancelamento pedido".
+- Cancelamento automático fica para depois e depende de a Bruna ligar o cancelamento
+  pela cliente no Minha Agenda (isso vale também para o site dela) e de guardarmos a
+  sessão de cada agendamento.
+- Regra da Bruna (2026-11-08): o sinal de 20% **não é devolvido** em caso de cancelamento. A
+  IA avisa isso ao pedir o Pix e de novo se a cliente pedir para cancelar (sem prometer
+  devolução nem crédito); o e-mail da equipe repete "o sinal não é devolvido".
+- O Minha Agenda recusa ligar "Cancelamento pelo Cliente" com "Agendamento sem Login"
+  ativo ("o usuário não teria cadastro para cancelar"). O agendamento da IA é o fluxo
+  sem login (convidada), então o cancelamento automático por esse caminho não é viável
+  com a configuração atual; desligar o "sem login" mudaria o site da Bruna inteiro.
+
+## 2026-11-08 — Remarcação feita pela IA (com reserva do novo horário)
+- Pedido do Victor/Bruna: o sinal já pago **vale** para o novo horário; prazo mínimo de
+  **24 h** antes do horário atual; o novo horário fica **reservado** (agendado de verdade).
+- Não existe endpoint de remarcar no site do Minha Agenda (só criar e cancelar), e
+  cancelar não é viável. Então a ferramenta `remarcar_agendamento` agenda o horário NOVO
+  (mesmo serviço, sem novo Pix) e marca o ANTIGO com `cancelamento_pedido_em`; o e-mail à
+  Bruna diz "CANCELE o horário antigo no Minha Agenda". Até ela cancelar, os dois horários
+  existem lá.
+- Travas no código: só com agendamento ativo feito pelo sistema, só 1 remarcação por
+  agendamento (`remarcado_de`), só com 24 h ou mais de antecedência, só o mesmo serviço,
+  só horário livre reconsultado na hora (até 15 dias). Recusa => a IA explica e passa para
+  a Bruna.
+- Risco aceito: a remarcação não pede comprovante (o sinal já foi pago), então quem tem um
+  agendamento ativo pode ocupar um segundo horário por algumas horas até a Bruna cancelar
+  o antigo; limitado a uma remarcação por agendamento.
+
+## Erros e alertas (sem Sentry/Grafana) — 2026-11-09
+- Decisão: para um salão com um número, o painel + e-mails bastam; Sentry e Grafana não entram
+  (mais um serviço com dados de cliente, LGPD, custo).
+- Erros do webhook, dos lembretes e quebras gerais das duas funções vão para `salao_eventos`
+  (tipos `erro_*` e `status_falha`), que o painel já lista. Sem texto de mensagem.
+- A função `salao-lembrete` (roda a cada minuto) manda um e-mail-resumo com a contagem por tipo
+  quando há erro novo, no máximo 1 por hora (marca `ultimo_alerta_erros` em `salao_info`).
+  Na primeira vez olha só a última hora. Sem e-mail configurado, só registra no log.
+- Quebra geral do webhook continua devolvendo erro (500): a Meta reenvia a mensagem.
