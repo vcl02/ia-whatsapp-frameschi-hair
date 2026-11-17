@@ -1,0 +1,53 @@
+# Publica as Edge Functions no Supabase. Só roda quando alguém clica em "Run workflow"
+# (Actions -> Publicar funções), nunca sozinho num push: deploy é decisão do dono.
+# Precisa do secret SALAO_SUPABASE_ACCESS_TOKEN no repositório (token pessoal do Supabase).
+name: Publicar funções
+
+on:
+  workflow_dispatch:
+    inputs:
+      funcao:
+        description: Qual função publicar
+        required: true
+        default: salao-webhook
+        type: choice
+        options:
+          - salao-webhook
+          - salao-lembrete
+          - salao-sincronizar
+          - salao-responder
+          - todas
+
+permissions:
+  contents: read
+
+concurrency: deploy-funcoes
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SALAO_SUPABASE_ACCESS_TOKEN }}
+      PROJETO: yzmyncxoskvqzdczaill
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+      - name: Configurar Deno 2
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Validar antes de publicar (lint, formato, tipos e testes)
+        run: deno task validar
+      - name: Configurar Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Publicar
+        run: |
+          if [ "${{ inputs.funcao }}" = "todas" ]; then
+            for f in salao-webhook salao-lembrete salao-sincronizar salao-responder; do
+              supabase functions deploy "$f" --project-ref "$PROJETO"
+            done
+          else
+            supabase functions deploy "${{ inputs.funcao }}" --project-ref "$PROJETO"
+          fi

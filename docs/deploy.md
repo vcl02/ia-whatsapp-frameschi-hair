@@ -43,6 +43,15 @@ Meta, ou apagar as funções `salao-*`. Para remover tudo do hub:
 4. Confirmar com a Bruna se ela usa os lembretes por WhatsApp do Minha Agenda.
 5. Migrar o número da Bruna (coexistência) e assinar `smb_message_echoes`.
 
+## Publicar pelo GitHub (jeito mais fácil)
+
+1. Uma vez só: no Supabase, Account -> Access Tokens -> gerar um token. No GitHub,
+   Settings -> Secrets and variables -> Actions -> New repository secret
+   `SALAO_SUPABASE_ACCESS_TOKEN` com esse token.
+2. Para publicar: Actions -> "Publicar funções" -> Run workflow -> escolher a função. O
+   workflow valida (lint, tipos, testes) e publica com a CLI do Supabase, que manda todos
+   os arquivos importados e respeita o `verify_jwt` do `supabase/config.toml`.
+
 ## Arquivos de cada função (deploy pelo MCP, tudo inline)
 
 - `salao-webhook`: index, handler e, em `_shared`: assinatura, whatsapp, deps, db, llm,

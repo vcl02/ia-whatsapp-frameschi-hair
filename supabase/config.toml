@@ -7,3 +7,10 @@ verify_jwt = false
 # Desativada (responde 410): o envio é pelo app do WhatsApp.
 [functions.salao-responder]
 verify_jwt = true
+
+# Chamadas pelo pg_cron (sem JWT): só fazem o que já está previsto e não devolvem dados.
+[functions.salao-lembrete]
+verify_jwt = false
+
+[functions.salao-sincronizar]
+verify_jwt = false
