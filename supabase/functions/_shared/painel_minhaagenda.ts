@@ -263,11 +263,19 @@ export class PainelMinhaAgenda {
     return itens;
   }
 
-  /** Agendamentos deste telefone de `datas` (uma leitura por dia, com cache). */
-  async daCliente(waId: string, datas: string[]): Promise<AgendamentoPainel[]> {
+  /**
+   * Agendamentos deste telefone de `datas` (uma leitura por dia, com cache). Os dias em
+   * `atualizar` são lidos de novo, sem cache (ex.: o dia de um agendamento que acabou de ser
+   * feito e ainda não aparece na leitura guardada).
+   */
+  async daCliente(
+    waId: string,
+    datas: string[],
+    atualizar: string[] = [],
+  ): Promise<AgendamentoPainel[]> {
     const out: AgendamentoPainel[] = [];
     for (const d of datas) {
-      for (const a of await this.agendaDoDia(d)) {
+      for (const a of await this.agendaDoDia(d, atualizar.includes(d) ? 0 : undefined)) {
         if (mesmoTelefone(waId, a.telefones)) out.push(a);
       }
     }

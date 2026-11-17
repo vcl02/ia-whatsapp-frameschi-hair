@@ -223,6 +223,7 @@ function cenario(
     semLimiteDiario?: boolean;
     painel?: DepsFerramentas['painel'];
     automatico?: DepsFerramentas['automatico'];
+    aposAgendar?: (data: string) => Promise<void>;
   } = {},
 ) {
   const propostas = new PropostasMemoria();
@@ -270,6 +271,7 @@ function cenario(
     agendador,
     propostas,
     semLimiteDiario: opcoes.semLimiteDiario,
+    aposAgendar: opcoes.aposAgendar,
     ...comuns,
   };
   return {
@@ -945,4 +947,38 @@ Deno.test('sem o id da agenda real (0): não executa sozinho', async () => {
   });
   assertStringIncludes(r, 'não está na agenda real');
   assertEquals(feitosChamadas.length, 0);
+});
+
+Deno.test('IA sem o id: acha o agendamento do bot na agenda real (lida de novo) e executa', async () => {
+  const feitos: string[] = [];
+  const c = cenario({
+    painel: {
+      daCliente: (_w, _d, atualizar = []) =>
+        Promise.resolve(atualizar.length ? [{ ...REAL, data: '2026-11-10' }] : []),
+    },
+    automatico: {
+      fazer: (
+        id,
+      ) => (feitos.push(id),
+        Promise.resolve({ ok: true, mensagem: 'ok', avisada: true })),
+      feitosDesde: () => Promise.resolve(0),
+    },
+  });
+  await c.ferramentas().executar('propor_agendamento', PROPOSTA);
+  await c.comprovante();
+  const r = await c.ferramentas().executar('cancelar_ou_remarcar_agendamento', {
+    ...CANCELAR,
+    agendamento_sistema_id: 0,
+  });
+  assertStringIncludes(r, 'CANCELADO no sistema');
+  assertEquals(feitos.length, 1);
+  assertEquals(c.pedidos.itens[0].agendamentoSistemaId, 555);
+});
+
+Deno.test('depois de agendar, a leitura guardada daquele dia é atualizada', async () => {
+  const dias: string[] = [];
+  const c = cenario({ aposAgendar: (d) => (dias.push(d), Promise.resolve()) });
+  await c.ferramentas().executar('propor_agendamento', PROPOSTA);
+  await c.comprovante();
+  assertEquals(dias, ['2026-11-10']);
 });

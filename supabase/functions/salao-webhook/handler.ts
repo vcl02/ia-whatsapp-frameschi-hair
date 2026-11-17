@@ -264,6 +264,11 @@ async function tratarInterno(req: Request): Promise<Response> {
             avisar: avisarResumo,
             log: logar,
             semLimiteDiario: listas.teste.has(c.waId),
+            // A leitura guardada da agenda daquele dia fica velha assim que o horário é
+            // marcado: lê de novo.
+            aposAgendar: async (data) => {
+              if (painel) await painel.agendaDoDia(data, 0);
+            },
           },
           m.tipo,
         )

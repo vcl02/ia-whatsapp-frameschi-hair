@@ -389,3 +389,14 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
   escondidos da IA "por agora" (`servicosParaIA` em `salao.ts`, aplicado em `bot.ts`),
   então ela não os oferece nem agenda. O espelho do Minha Agenda e o painel continuam com
   eles. Para voltar a mostrar, é só tirar o filtro.
+
+## Cache velho da agenda real — 2026-11-17
+
+- No primeiro teste de remarcação pela IA, o pedido foi para a Bruna em vez de executar: a
+  leitura guardada do dia 25/11 era das 19:59 e o horário foi marcado às 20:05, então a
+  "agenda real" não tinha o horário e a IA mandou id 0. Correções: (1) depois de agendar,
+  o dia é relido (`aposAgendar`); (2) se o agendamento do bot não aparece na leitura
+  guardada, o dia é relido sem cache antes de concluir que sumiu (antes, isso podia marcar
+  um agendamento real como `cancelado_no_sistema`); (3) se a IA não manda o id, o código
+  acha o mesmo horário na agenda real, relida sem cache. O motivo de cada pedido que não
+  executou sozinho agora vai para o log (`pedido_sem_automatico`).

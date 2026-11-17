@@ -86,7 +86,7 @@ function montar(tokenGuardado: TokenPainel | null, recusarPrimeiro = false) {
   let guardado = tokenGuardado;
   const cacheMap = new Map<string, AgendamentoPainel[]>();
   const cache: CacheAgenda = {
-    ler: (d) => Promise.resolve(cacheMap.get(d) ?? null),
+    ler: (d, maxIdade) => Promise.resolve(maxIdade <= 0 ? null : cacheMap.get(d) ?? null),
     gravar: (d, i) => (cacheMap.set(d, i), Promise.resolve()),
   };
   let recusar = recusarPrimeiro;
@@ -238,4 +238,39 @@ Deno.test('agenda real: sem horário marcado avisa a IA; agendamento do bot que 
     () => {},
   );
   assertEquals(b.mudancas, []);
+});
+
+Deno.test('daCliente: dias em "atualizar" são lidos de novo, sem cache', async () => {
+  const t = montar({ token: 'velho', expiraEm: 10 * 24 * 60 * 60_000 });
+  await t.painel.daCliente('5511999998888', ['2026-11-19', '2026-11-20']);
+  assertEquals(t.chamadas.filter((c) => c.includes('grouped')).length, 2);
+  await t.painel.daCliente('5511999998888', ['2026-11-19', '2026-11-20']);
+  assertEquals(t.chamadas.filter((c) => c.includes('grouped')).length, 2); // cache
+  await t.painel.daCliente('5511999998888', ['2026-11-19', '2026-11-20'], ['2026-11-20']);
+  assertEquals(t.chamadas.filter((c) => c.includes('grouped')).length, 3); // só o dia 20
+});
+
+Deno.test('agenda real: agendamento do bot que só faltava no cache velho não é dado como sumido', async () => {
+  const b = repoBot({ ...PROPOSTA, data: '2026-11-19' });
+  const chamadas: string[][] = [];
+  const painel = {
+    daCliente: (_w: string, _d: string[], atualizar: string[] = []) => {
+      chamadas.push(atualizar);
+      // leitura guardada (velha) não tem o horário; a leitura nova tem
+      return Promise.resolve(
+        atualizar.length ? lerAgendaDoDia(DIA).filter((a) => a.id === 10) : [],
+      );
+    },
+  };
+  const t = await contextoDaAgendaReal(
+    painel,
+    b.repo,
+    'c1',
+    '5511999998888',
+    AGORA,
+    () => {},
+  );
+  assertEquals(chamadas, [[], ['2026-11-19']]);
+  assertEquals(b.mudancas, []); // não marcou como cancelado
+  assertStringIncludes(t, 'Progressiva, quinta-feira, 19/11, às 13:00');
 });

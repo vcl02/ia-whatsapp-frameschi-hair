@@ -621,6 +621,23 @@ export function montarFerramentas(
         return 'esse agendamento_sistema_id não está na agenda desta cliente: use o número entre colchetes da agenda real do contexto, ou 0 se o horário não estiver lá';
       }
     }
+    // A IA não mandou o id (ou mandou 0), mas o agendamento é um que o bot fez: acha o
+    // mesmo horário na agenda real (lida de novo, sem cache, porque pode ser recém-marcado).
+    if (!doSistema && atual && deps.painel) {
+      try {
+        const lista = await deps.painel.daCliente(
+          ctx.waId,
+          proximasDatas(hojeSaoPaulo(agora()), DIAS_AGENDA_CLIENTE),
+          [atual.data],
+        );
+        doSistema = lista.find((a) =>
+          a.data === atual.data && a.inicio === atual.hora &&
+          a.profissionalId === atual.profissionalId
+        ) ?? null;
+      } catch (err) {
+        deps.log('erro_painel_minhaagenda', { erro: String(err) });
+      }
+    }
     if (!atual && !horarioInformado && !doSistema) {
       return 'não achei o agendamento da cliente: pergunte qual serviço, dia e horário ela tem marcado e registre de novo, preenchendo horario_atual';
     }
@@ -752,6 +769,10 @@ export function montarFerramentas(
     }
 
     // Não deu para fazer sozinho: o pedido fica no painel para a Bruna.
+    deps.log('pedido_sem_automatico', {
+      conversa: ctx.conversaId,
+      motivo: motivoSemAutomatico,
+    });
     if (tipo === 'cancelar' && atual) {
       await deps.propostas!.marcarCancelamentoPedido(
         ctx.conversaId,
@@ -805,6 +826,8 @@ export interface DepsComprovante {
   agora?: () => Date;
   /** Número da lista de teste: não vale o limite de 1 agendamento por conversa a cada 24 h. */
   semLimiteDiario?: boolean;
+  /** Chamado depois de agendar (ex.: atualizar a leitura guardada da agenda daquele dia). */
+  aposAgendar?: (data: string) => Promise<void>;
 }
 
 /**
@@ -896,6 +919,11 @@ export async function receberComprovante(
     `comprovante recebido (${tipoMidia})`,
   );
   deps.log('agendado', { conversa: ctx.conversaId, proposta: proposta.id });
+  try {
+    await deps.aposAgendar?.(proposta.data);
+  } catch (e) {
+    deps.log('erro_atualizar_agenda', { erro: String(e) });
+  }
   const sinal = sinalDoServico(proposta.preco)?.texto ?? '20%';
   try {
     await deps.avisar(
@@ -1019,7 +1047,21 @@ export async function contextoDaAgendaReal(
 ): Promise<string> {
   const hoje = hojeSaoPaulo(agora);
   const datas = proximasDatas(hoje, DIAS_AGENDA_CLIENTE);
-  const naAgenda = await painel.daCliente(waId, datas);
+  let naAgenda = await painel.daCliente(waId, datas);
+
+  // O agendamento do bot não aparece na leitura guardada: pode ser só cache velho (o
+  // horário acabou de ser marcado). Lê esse dia de novo, sem cache, antes de concluir que
+  // ele sumiu.
+  const doBot = await repo.agendadoAtivo(conversaId, hoje);
+  if (
+    doBot && datas.includes(doBot.data) &&
+    !naAgenda.some((a) =>
+      a.data === doBot.data && a.inicio === doBot.hora &&
+      a.profissionalId === doBot.profissionalId
+    )
+  ) {
+    naAgenda = await painel.daCliente(waId, datas, [doBot.data]);
+  }
 
   // Agendamentos do bot que sumiram da agenda real (dentro da janela consultada).
   const removidos: Proposta[] = [];
