@@ -2,7 +2,9 @@
 // Painel da IA: página inicial com o liga/desliga da IA e o que importa (números,
 // conversas que precisam de atenção, erros e agendamentos).
 // O texto das conversas só aparece no visor, somente leitura, para ligar aprendizados a mensagens.
-// O painel não envia nem altera mensagens (o banco só dá select).
+// O painel não envia nem altera mensagens (o banco só dá select). A única ação que mexe
+// fora do banco é "Fazer no Minha Agenda" num pedido: chama salao-executar-pedido, que
+// cancela/remarca no Minha Agenda e manda a confirmação à cliente.
 const sb = supabase.createClient(
   window.PAINEL.supabaseUrl,
   window.PAINEL.supabaseAnonKey,
@@ -289,6 +291,28 @@ async function marcarPedido(p, feito) {
   await carregarPedidos();
 }
 
+/** Bruna aprovou: a função faz no Minha Agenda e avisa a cliente (se der). */
+async function executarPedido(p, nome, botao) {
+  const acao = p.tipo === 'cancelar'
+    ? `CANCELAR no Minha Agenda o horário de ${nome}:\n${p.horario_atual || ''}`
+    : `REMARCAR no Minha Agenda o horário de ${nome}:\n${p.horario_atual || ''}\n` +
+      `para ${diaDaSemana(p.novo_data)} às ${p.novo_hora} com ${p.novo_profissional}`;
+  if (!confirm(`${acao}\n\nA cliente recebe uma mensagem confirmando. Fazer agora?`)) {
+    return;
+  }
+  botao.disabled = true;
+  botao.textContent = 'Fazendo...';
+  const { data, error } = await sb.functions.invoke('salao-executar-pedido', {
+    body: { pedido_id: p.id },
+  });
+  let msg = data?.mensagem;
+  if (!msg && error?.context?.json) {
+    msg = (await error.context.json().catch(() => null))?.mensagem;
+  }
+  alert(msg || (error ? 'Não consegui fazer: ' + error.message : 'Feito.'));
+  await carregarPedidos();
+}
+
 function linhaDoPedido(p) {
   const c = Array.isArray(p.salao_conversas) ? p.salao_conversas[0] : p.salao_conversas;
   const nome = c ? c.nome_cliente || c.nome_perfil || telefone(c.wa_id) : 'Cliente';
@@ -299,6 +323,15 @@ function linhaDoPedido(p) {
     feito ? 'Desfazer' : 'Feito',
   );
   botao.onclick = () => marcarPedido(p, !feito);
+  const automatico = !feito && p.agendamento_sistema_id &&
+    (p.tipo === 'cancelar' || p.tipo === 'remarcar');
+  let fazer = null;
+  if (automatico) {
+    fazer = el('button', { class: 'btn ouro' }, 'Fazer no Minha Agenda');
+    fazer.onclick = () => executarPedido(p, nome, fazer);
+    botao.className = 'btn pequeno';
+    botao.textContent = 'Já fiz à mão';
+  }
   const novo = p.novo_data && p.novo_hora
     ? `Novo horário: ${diaDaSemana(p.novo_data)} às ${p.novo_hora}${
       p.novo_profissional ? ` com ${p.novo_profissional}` : ''
@@ -327,13 +360,14 @@ function linhaDoPedido(p) {
       p.observacao
         ? el('div', { class: 'sub obs-ia' }, `Observação da IA: ${p.observacao}`)
         : null,
+      p.resultado ? el('div', { class: 'sub obs-ia' }, p.resultado) : null,
       el(
         'div',
         { class: 'sub' },
         feito ? `Feito em ${quando(p.feito_em)}` : `Pedido em ${quando(p.criado_em)}`,
       ),
     ),
-    el('div', { class: 'acoes' }, botao),
+    el('div', { class: 'acoes' }, fazer, botao),
   );
 }
 
@@ -341,7 +375,7 @@ async function carregarPedidos() {
   const { data, error } = await sb
     .from('salao_pedidos')
     .select(
-      'id, tipo, status, horario_atual, novo_data, novo_hora, novo_profissional, motivo, observacao, criado_em, feito_em, salao_conversas(wa_id, nome_perfil, nome_cliente)',
+      'id, tipo, status, horario_atual, novo_data, novo_hora, novo_profissional, motivo, observacao, criado_em, feito_em, agendamento_sistema_id, resultado, salao_conversas(wa_id, nome_perfil, nome_cliente)',
     )
     .in('status', ['pendente', 'feito'])
     .order('criado_em', { ascending: false })

@@ -16,6 +16,7 @@ on:
           - salao-lembrete
           - salao-sincronizar
           - salao-responder
+          - salao-executar-pedido
           - todas
 
 permissions:
@@ -44,7 +45,7 @@ jobs:
       - name: Publicar
         run: |
           if [ "${{ inputs.funcao }}" = "todas" ]; then
-            for f in salao-webhook salao-lembrete salao-sincronizar salao-responder; do
+            for f in salao-webhook salao-lembrete salao-sincronizar salao-responder salao-executar-pedido; do
               supabase functions deploy "$f" --project-ref "$PROJETO" --yes
             done
           else

@@ -311,3 +311,16 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
   novo na página pública).
 - Fase 2 (a fazer): cancelar/remarcar pelo painel (`PUT`/`DELETE /appointments/{id}`) com
   aprovação da Bruna no painel do salão.
+
+## Fase 2: cancelar/remarcar no Minha Agenda com aprovação — 2026-11-17
+
+- A agenda real que a IA recebe traz `[agendamento N]` (id no Minha Agenda). Ao registrar
+  um pedido, a IA manda esse id; o código só aceita se o agendamento estiver na agenda do
+  telefone da conversa.
+- No painel do salão, o pedido com id ganha o botão "Fazer no Minha Agenda". Ele chama
+  `salao-executar-pedido` (JWT + `salao_eh_equipe`), que confere de novo (agendamento é do
+  telefone; na remarcação, o novo horário está livre com a profissional, lido sem cache),
+  faz `DELETE` ou `PUT /appointments/{id}` e avisa a cliente pelo WhatsApp se estiver na
+  janela de 24 h. Agendamento com mais de um serviço ou com produto não é remarcado
+  automaticamente.
+- A IA continua sem poder mexer na agenda: só quem aprova no painel dispara a ação.

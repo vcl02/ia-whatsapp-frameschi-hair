@@ -192,6 +192,7 @@ async function tratarInterno(req: Request): Promise<Response> {
           agendador,
           propostas,
           pedidos,
+          painel: painel ?? undefined,
           pix,
           avisar: avisarResumo,
           log: logar,

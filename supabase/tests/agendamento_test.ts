@@ -219,6 +219,7 @@ function cenario(
     falharAgendamento?: boolean;
     semPix?: boolean;
     semLimiteDiario?: boolean;
+    painel?: DepsFerramentas['painel'];
   } = {},
 ) {
   const propostas = new PropostasMemoria();
@@ -256,6 +257,7 @@ function cenario(
     propostas,
     pedidos,
     pix: opcoes.semPix ? undefined : PIX,
+    painel: opcoes.painel,
     maxDias: 15,
     ...comuns,
   };
@@ -772,4 +774,38 @@ Deno.test('conferir no Minha Agenda: falha na consulta não muda nada', async ()
   assertEquals(t, null);
   assertEquals(c.propostas.itens[0].status, 'agendado');
   assertEquals(log, ['erro_conferir_agendamento']);
+});
+
+Deno.test('pedido com agendamento da agenda real: só aceita id desta cliente e guarda o id', async () => {
+  const real = {
+    id: 555,
+    data: '2026-11-10',
+    inicio: '09:00',
+    fim: '10:00',
+    profissionalId: 486643,
+    profissionalNome: 'Bruna',
+    servicoId: 5732343,
+    servico: 'Banho de Lua',
+    preco: 30,
+    clienteNome: 'Isa',
+    telefones: ['11992090474'],
+  };
+  const c = cenario({ painel: { daCliente: () => Promise.resolve([real]) } });
+  assertStringIncludes(
+    await c.ferramentas().executar('registrar_pedido_para_bruna', {
+      ...CANCELAR,
+      agendamento_sistema_id: 999,
+    }),
+    'não está na agenda desta cliente',
+  );
+  assertEquals(c.pedidos.itens.length, 0);
+  assertStringIncludes(
+    await c.ferramentas().executar('registrar_pedido_para_bruna', {
+      ...CANCELAR,
+      agendamento_sistema_id: 555,
+    }),
+    'PEDIDO REGISTRADO',
+  );
+  assertEquals(c.pedidos.itens[0].agendamentoSistemaId, 555);
+  assertStringIncludes(c.pedidos.itens[0].horarioAtual!, 'Banho de Lua');
 });

@@ -31,6 +31,7 @@ import {
   resumoDoPedido,
 } from './agendamento.ts';
 import type { PropostaParaLembrete, RepositorioLembretes } from './lembrete.ts';
+import type { PedidoParaExecutar, RepositorioExecucao } from './execucao.ts';
 import type {
   AgendamentoPainel,
   ArmazemTokenPainel,
@@ -658,6 +659,7 @@ export class RepositorioPedidosSupabase implements RepositorioPedidos {
         .insert({
           conversa_id: p.conversaId,
           agendamento_id: p.agendamentoId,
+          agendamento_sistema_id: p.agendamentoSistemaId ?? null,
           tipo: p.tipo,
           horario_atual: p.horarioAtual,
           novo_data: p.novoData,
@@ -831,6 +833,114 @@ export class CacheAgendaSupabase implements CacheAgenda {
         itens,
         atualizado_em: new Date(this.agora()).toISOString(),
       }),
+    );
+  }
+}
+
+/** Pedidos aprovados pela Bruna no painel, para executar no Minha Agenda. */
+export class RepositorioExecucaoSupabase implements RepositorioExecucao {
+  constructor(private db: SupabaseClient) {}
+
+  async carregar(id: string): Promise<PedidoParaExecutar | null> {
+    const r = checar(
+      await this.db
+        .from('salao_pedidos')
+        .select(
+          'id, conversa_id, tipo, status, agendamento_id, agendamento_sistema_id, novo_data, novo_hora, novo_profissional, salao_conversas(wa_id, ultimo_inbound_em)',
+        )
+        .eq('id', id)
+        .eq('status', 'pendente')
+        .maybeSingle(),
+    ) as {
+      id: string;
+      conversa_id: string;
+      tipo: string;
+      agendamento_id: string | null;
+      agendamento_sistema_id: number | null;
+      novo_data: string | null;
+      novo_hora: string | null;
+      novo_profissional: string | null;
+      salao_conversas:
+        | { wa_id: string; ultimo_inbound_em: string | null }
+        | Array<{ wa_id: string; ultimo_inbound_em: string | null }>
+        | null;
+    } | null;
+    if (!r) return null;
+    const c = Array.isArray(r.salao_conversas) ? r.salao_conversas[0] : r.salao_conversas;
+    if (!c) return null;
+    return {
+      id: r.id,
+      conversaId: r.conversa_id,
+      waId: c.wa_id,
+      tipo: r.tipo,
+      agendamentoSistemaId: r.agendamento_sistema_id == null
+        ? null
+        : Number(r.agendamento_sistema_id),
+      agendamentoId: r.agendamento_id,
+      novoData: r.novo_data,
+      novoHora: r.novo_hora,
+      novoProfissional: r.novo_profissional,
+      ultimoInbound: c.ultimo_inbound_em ? new Date(c.ultimo_inbound_em) : null,
+    };
+  }
+
+  async reservar(id: string): Promise<boolean> {
+    const r = checar(
+      await this.db
+        .from('salao_pedidos')
+        .update({ executado_em: new Date().toISOString(), resultado: 'executando' })
+        .eq('id', id)
+        .eq('status', 'pendente')
+        .is('executado_em', null)
+        .select('id'),
+    ) as unknown[];
+    return r.length > 0;
+  }
+
+  async concluir(id: string, resultado: string): Promise<void> {
+    checar(
+      await this.db
+        .from('salao_pedidos')
+        .update({ status: 'feito', feito_em: new Date().toISOString(), resultado })
+        .eq('id', id),
+    );
+  }
+
+  async liberar(id: string, erro: string): Promise<void> {
+    checar(
+      await this.db
+        .from('salao_pedidos')
+        .update({ executado_em: null, resultado: `Não feito: ${erro}`.slice(0, 500) })
+        .eq('id', id),
+    );
+  }
+
+  async acertarAgendamentoBot(
+    agendamentoId: string,
+    novo:
+      | { data: string; hora: string; profissionalId: number; profissionalNome: string }
+      | null,
+  ): Promise<void> {
+    checar(
+      await this.db
+        .from('salao_agendamentos')
+        .update(
+          novo
+            ? {
+              data: novo.data,
+              hora: novo.hora,
+              profissional_id: novo.profissionalId,
+              profissional_nome: novo.profissionalNome,
+              cancelamento_pedido_em: null,
+              atualizado_em: new Date().toISOString(),
+            }
+            : {
+              status: 'cancelado_no_sistema',
+              detalhe: 'cancelado pela Bruna pelo painel do salão',
+              atualizado_em: new Date().toISOString(),
+            },
+        )
+        .eq('id', agendamentoId),
     );
   }
 }

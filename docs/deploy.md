@@ -57,6 +57,8 @@ Meta, ou apagar as funções `salao-*`. Para remover tudo do hub:
 - `salao-webhook`: index, handler e, em `_shared`: assinatura, whatsapp, deps, db, llm,
   disponibilidade, agendamento, painel_minhaagenda, bot, salao, aviso, atendente,
   llm_claude, eventos.
+- `salao-executar-pedido`: index, handler e, em `_shared`: deps, db, execucao,
+  painel_minhaagenda, agendamento, disponibilidade, whatsapp, eventos (exige JWT).
 - `salao-lembrete`: index, handler e, em `_shared`: deps, whatsapp, db, salao, bot, llm,
   disponibilidade, agendamento, painel_minhaagenda, lembrete, eventos, alertas, aviso.
 - `salao-sincronizar`: index, handler e, em `_shared`: deps, db, llm, aviso, minhaagenda,

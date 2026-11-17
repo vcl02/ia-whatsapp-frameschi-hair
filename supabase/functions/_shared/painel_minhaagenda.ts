@@ -4,7 +4,8 @@
 //  - a agenda de cada dia fica em cache por alguns minutos (tabela salao_agenda_cache).
 // Credenciais só em secrets: SALAO_MA_USUARIO, SALAO_MA_SENHA e SALAO_MA_CLIENTE
 // (o valor do cabeçalho "Authorization: Basic" que o portal usa no login).
-// Fase 1: só leitura. Nada aqui altera a agenda.
+// Leitura: agenda do dia. Escrita (cancelar/remarcar): só a função salao-executar-pedido,
+// depois que a Bruna aprova o pedido no painel do salão. A IA nunca escreve na agenda.
 
 export const API_PAINEL = 'https://api.minhaagendaapp.com.br';
 
@@ -41,6 +42,7 @@ export interface AgendamentoPainel {
   fim: string; // HH:MM
   profissionalId: number;
   profissionalNome: string;
+  servicoId: number | null;
   servico: string;
   preco: number | null;
   clienteNome: string;
@@ -89,6 +91,7 @@ export function lerAgendaDoDia(json: unknown): AgendamentoPainel[] {
         fim: str(a.endTime).slice(0, 5),
         profissionalId: Number(a.userId),
         profissionalNome: str(obj(a.user).name).trim().split(/\s+/)[0] ?? '',
+        servicoId: typeof a.serviceId === 'number' ? a.serviceId : null,
         servico: str(obj(a.service).name) || 'serviço',
         preco: typeof a.price === 'number' ? a.price : null,
         clienteNome: str(c.name).trim() || str(a.customerName).trim(),
@@ -158,10 +161,24 @@ export class PainelMinhaAgenda {
     return (await this.login()).token;
   }
 
-  private async get(caminho: string): Promise<unknown> {
+  private get(caminho: string): Promise<unknown> {
+    return this.chamar('GET', caminho);
+  }
+
+  private async chamar(
+    metodo: 'GET' | 'PUT' | 'DELETE',
+    caminho: string,
+    corpo?: unknown,
+  ): Promise<unknown> {
     for (const novo of [false, true]) {
       const r = await this.fetchFn(`${API_PAINEL}${caminho}`, {
-        headers: { ...CABECALHOS, authorization: `Bearer ${await this.token(novo)}` },
+        method: metodo,
+        headers: {
+          ...CABECALHOS,
+          authorization: `Bearer ${await this.token(novo)}`,
+          ...(corpo === undefined ? {} : { 'content-type': 'application/json' }),
+        },
+        ...(corpo === undefined ? {} : { body: JSON.stringify(corpo) }),
       });
       if (r.status === 401 && !novo) {
         await r.body?.cancel();
@@ -171,22 +188,58 @@ export class PainelMinhaAgenda {
         await r.body?.cancel();
         throw new FalhaPainel(`painel do Minha Agenda respondeu HTTP ${r.status}`);
       }
-      return await r.json();
+      if (r.status === 204) return null;
+      const texto = await r.text();
+      return texto ? JSON.parse(texto) : null;
     }
     throw new FalhaPainel('painel do Minha Agenda recusou o login');
   }
 
-  private idsProfissionais: number[] | null = null;
+  private listaProfissionais: Array<{ id: number; nome: string }> | null = null;
 
-  /** Ids das profissionais (lidos uma vez por execução da função). */
+  /** Profissionais (id e primeiro nome), lidos uma vez por execução da função. */
+  async equipe(): Promise<Array<{ id: number; nome: string }>> {
+    if (this.listaProfissionais) return this.listaProfissionais;
+    const lista = arr(await this.get('/employees?professionalOnly=true')).flatMap((e) => {
+      const x = obj(e);
+      return typeof x.id === 'number'
+        ? [{ id: x.id, nome: str(x.name).trim().split(/\s+/)[0] ?? '' }]
+        : [];
+    });
+    if (lista.length === 0) throw new FalhaPainel('painel sem profissionais');
+    this.listaProfissionais = lista;
+    return lista;
+  }
+
   async profissionais(): Promise<number[]> {
-    if (this.idsProfissionais) return this.idsProfissionais;
-    const ids = arr(await this.get('/employees?professionalOnly=true'))
-      .map((e) => obj(e).id)
-      .filter((id): id is number => typeof id === 'number');
-    if (ids.length === 0) throw new FalhaPainel('painel sem profissionais');
-    this.idsProfissionais = ids;
-    return ids;
+    return (await this.equipe()).map((p) => p.id);
+  }
+
+  /** Agendamento completo, como o painel devolve (para conferir e montar a remarcação). */
+  async agendamento(id: number): Promise<Obj> {
+    const j = obj(await this.get(`/appointments/${id}`));
+    if (j.id !== id) throw new FalhaPainel('agendamento não encontrado no painel');
+    return j;
+  }
+
+  /** Apaga o agendamento (é o que o botão "excluir" do painel faz). */
+  async cancelar(id: number, data: string): Promise<void> {
+    await this.chamar('DELETE', `/appointments/${id}`);
+    await this.agendaDoDia(data, 0); // atualiza o cache do dia
+  }
+
+  /** Muda dia, horário e profissional, mantendo o resto do agendamento. */
+  async remarcar(
+    atual: Obj,
+    novo: { data: string; hora: string; profissionalId: number },
+  ): Promise<void> {
+    await this.chamar(
+      'PUT',
+      `/appointments/${atual.id}`,
+      corpoRemarcacao(atual, novo),
+    );
+    await this.agendaDoDia(str(atual.date), 0);
+    if (novo.data !== str(atual.date)) await this.agendaDoDia(novo.data, 0);
   }
 
   /** Agenda do dia (todas as profissionais), com cache de `maxIdadeMs`. */
@@ -220,6 +273,56 @@ export class PainelMinhaAgenda {
     }
     return out;
   }
+}
+
+/**
+ * Corpo do PUT de remarcação, no formato que o portal manda (visto num HAR de 2026-11-16).
+ * Recusa agendamento com mais de um serviço ou com produto: esses a Bruna faz à mão.
+ */
+export function corpoRemarcacao(
+  a: Obj,
+  novo: { data: string; hora: string; profissionalId: number },
+): Record<string, unknown> {
+  const servicos = arr(a.services).length || arr(a.appHasServices).length;
+  if (servicos > 1 || a.containsProducts === true || arr(a.appHasProducts).length) {
+    throw new FalhaPainel(
+      'agendamento com mais de um serviço ou com produto: remarque no Minha Agenda',
+    );
+  }
+  if (typeof a.serviceId !== 'number' || typeof a.id !== 'number') {
+    throw new FalhaPainel('agendamento sem serviço identificado');
+  }
+  return {
+    id: a.id,
+    date: novo.data,
+    startTime: novo.hora,
+    duration: a.duration,
+    customerId: a.customerId,
+    accountsReceivableId: a.accountsReceivableId ?? null,
+    paymentMethod: a.paymentMethod ?? null,
+    comments: a.comments ?? '',
+    colorId: a.colorId ?? null,
+    materialCost: a.materialCost ?? null,
+    reminder: a.reminder ?? false,
+    userId: novo.profissionalId,
+    roomId: a.roomId ?? null,
+    appointmentRepeatInfoForm: null,
+    discount: a.discount ?? null,
+    discountInPercentage: a.discountInPercentage ?? false,
+    tag: a.tag ?? null,
+    modelVersion: a.modelVersion,
+    loyaltyCardCustomerId: a.loyaltyCardCustomerId ?? null,
+    items: [{ serviceId: a.serviceId, price: a.price }],
+    productItems: [],
+  };
+}
+
+/** Telefones do cadastro da cliente de um agendamento completo (só dígitos). */
+export function telefonesDoAgendamento(a: Obj): string[] {
+  const c = obj(a.customer);
+  return [c.phone1, c.phone2, c.phoneInternational].map(digitos).filter((d) =>
+    d.length >= 8
+  );
 }
 
 /** "2026-11-19" + n dias. */

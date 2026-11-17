@@ -14,3 +14,7 @@ verify_jwt = false
 
 [functions.salao-sincronizar]
 verify_jwt = false
+
+# Chamada pelo painel do salão (botão "Fazer no Minha Agenda"): exige login da equipe.
+[functions.salao-executar-pedido]
+verify_jwt = true

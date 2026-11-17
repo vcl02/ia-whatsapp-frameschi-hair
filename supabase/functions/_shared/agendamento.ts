@@ -21,6 +21,7 @@ import {
   validarData,
 } from './disponibilidade.ts';
 import {
+  type AgendamentoPainel,
   DIAS_AGENDA_CLIENTE,
   type PainelMinhaAgenda,
   proximasDatas,
@@ -107,6 +108,11 @@ export const DEF_PEDIDO: DefinicaoFerramenta = {
     type: 'object',
     properties: {
       tipo: { type: 'string', enum: ['cancelar', 'remarcar'] },
+      agendamento_sistema_id: {
+        type: 'integer',
+        description:
+          'o número que aparece como [agendamento N] na agenda real da cliente, no contexto. 0 se o horário não estiver lá',
+      },
       motivo: {
         type: 'string',
         description:
@@ -139,6 +145,7 @@ export const DEF_PEDIDO: DefinicaoFerramenta = {
     },
     required: [
       'tipo',
+      'agendamento_sistema_id',
       'motivo',
       'horario_atual',
       'novo_data',
@@ -258,6 +265,8 @@ export interface RepositorioPropostas {
 export interface NovoPedido {
   conversaId: string;
   agendamentoId: string | null;
+  /** Id do agendamento no Minha Agenda (painel). Com ele a Bruna executa com um clique. */
+  agendamentoSistemaId?: number | null;
   tipo: 'cancelar' | 'remarcar' | 'indefinido';
   horarioAtual: string | null;
   novoData: string | null;
@@ -413,6 +422,8 @@ export interface DepsFerramentas {
   propostas?: RepositorioPropostas;
   pix?: Pix; // ausente = não propõe agendamento (nada de sinal sem chave Pix)
   pedidos?: RepositorioPedidos; // ausente = a IA não registra pedidos (só passa para a Bruna)
+  /** Agenda real (painel): confere se o agendamento do pedido é mesmo desta cliente. */
+  painel?: Pick<PainelMinhaAgenda, 'daCliente'>;
   avisar: (assunto: string, texto: string) => Promise<void>;
   log: (evento: string, dados?: Record<string, unknown>) => void;
   maxDias: number;
@@ -536,7 +547,24 @@ export function montarFerramentas(
     const atual = deps.propostas
       ? await deps.propostas.agendadoAtivo(ctx.conversaId, hojeSaoPaulo(agora()))
       : null;
-    if (!atual && !horarioInformado) {
+    // Agendamento da agenda real: tem que ser desta cliente (pelo telefone).
+    const idSistema = Number(e.agendamento_sistema_id) || 0;
+    let doSistema: AgendamentoPainel | null = null;
+    if (idSistema && deps.painel) {
+      try {
+        const lista = await deps.painel.daCliente(
+          ctx.waId,
+          proximasDatas(hojeSaoPaulo(agora()), DIAS_AGENDA_CLIENTE),
+        );
+        doSistema = lista.find((a) => a.id === idSistema) ?? null;
+      } catch (err) {
+        deps.log('erro_painel_minhaagenda', { erro: String(err) });
+      }
+      if (!doSistema) {
+        return 'esse agendamento_sistema_id não está na agenda desta cliente: use o número entre colchetes da agenda real do contexto, ou 0 se o horário não estiver lá';
+      }
+    }
+    if (!atual && !horarioInformado && !doSistema) {
       return 'não achei o agendamento da cliente: pergunte qual serviço, dia e horário ela tem marcado e registre de novo, preenchendo horario_atual';
     }
     const alertas: string[] = [];
@@ -554,8 +582,23 @@ export function montarFerramentas(
       if (!data || !HORA_RE.test(hora) || !prof) {
         return 'faltam dados do novo horário: dia (AAAA-MM-DD), horário (HH:MM) e profissional, como vieram da consulta';
       }
-      if (atual) {
-        const r = await agendaOuErro(atual.servicoId, data, true);
+      const base = atual
+        ? {
+          servicoId: atual.servicoId,
+          data: atual.data,
+          hora: atual.hora,
+          prof: atual.profissionalId,
+        }
+        : doSistema?.servicoId
+        ? {
+          servicoId: doSistema.servicoId,
+          data: doSistema.data,
+          hora: doSistema.inicio,
+          prof: doSistema.profissionalId,
+        }
+        : null;
+      if (base) {
+        const r = await agendaOuErro(base.servicoId, data, true);
         if (typeof r === 'string') return r;
         const p = r.profissionais.find((x) =>
           x.nome.toLowerCase() === prof.toLowerCase()
@@ -568,7 +611,7 @@ export function montarFerramentas(
         if (!p.horarios.includes(hora)) {
           return `esse horário não está livre com ${p.nome}. ${agendaEmTexto(r)}`;
         }
-        if (data === atual.data && hora === atual.hora && p.id === atual.profissionalId) {
+        if (data === base.data && hora === base.hora && p.id === base.prof) {
           return 'esse já é o horário agendado: pergunte para qual novo dia e horário ela quer remarcar';
         }
         novoProf = p.nome;
@@ -580,7 +623,7 @@ export function montarFerramentas(
         if (erroData) return erroData;
         novoProf = prof;
         alertas.push(
-          'Novo horário NÃO conferido na agenda (agendamento atual não é do bot).',
+          'Novo horário NÃO conferido na agenda (serviço do agendamento atual não identificado).',
         );
       }
       novoData = data;
@@ -593,8 +636,15 @@ export function montarFerramentas(
       await deps.pedidos.criar({
         conversaId: ctx.conversaId,
         agendamentoId: atual?.id ?? null,
+        agendamentoSistemaId: doSistema?.id ?? null,
         tipo,
-        horarioAtual: atual ? resumoDoAgendamento(atual) : horarioInformado,
+        horarioAtual: doSistema
+          ? `${doSistema.servico}, ${
+            dataCurta(doSistema.data)
+          }, às ${doSistema.inicio}, com ${doSistema.profissionalNome}`
+          : atual
+          ? resumoDoAgendamento(atual)
+          : horarioInformado,
         novoData,
         novoHora,
         novoProfissional: novoProf,
@@ -913,13 +963,13 @@ export async function contextoDaAgendaReal(
     partes.push(
       `Horários desta cliente na agenda:\n${
         naAgenda.map((a) =>
-          `- ${a.servico}, ${
+          `- [agendamento ${a.id}] ${a.servico}, ${
             dataCurta(a.data)
           }, às ${a.inicio}, com ${a.profissionalNome}${
             a.preco ? `, ${reais(a.preco)}` : ''
           }`
         ).join('\n')
-      }\nSe ela pedir para CANCELAR ou REMARCAR um desses horários, siga o roteiro: confirme qual é, pergunte o motivo sem insistir e, para remarcar, o novo dia e horário (consulte com consultar_horarios); com tudo em mãos, chame registrar_pedido_para_bruna com horario_atual preenchido com o horário desta lista. Você não cancela nem remarca. Não chame registrar_pedido_para_bruna se ela não pediu para cancelar ou remarcar.`,
+      }\nSe ela pedir para CANCELAR ou REMARCAR um desses horários, siga o roteiro: confirme qual é, pergunte o motivo sem insistir e, para remarcar, o novo dia e horário (consulte com consultar_horarios); com tudo em mãos, chame registrar_pedido_para_bruna com agendamento_sistema_id = o número entre colchetes desse horário. Você não cancela nem remarca. Não chame registrar_pedido_para_bruna se ela não pediu para cancelar ou remarcar.`,
     );
   }
   for (const r of removidos) {

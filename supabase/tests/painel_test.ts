@@ -52,6 +52,7 @@ Deno.test('lerAgendaDoDia: só os campos usados, em ordem de horário', () => {
     fim: '15:00',
     profissionalId: 486643,
     profissionalNome: 'Bruna',
+    servicoId: null,
     servico: 'Progressiva',
     preco: 450,
     clienteNome: 'Ana Souza',
