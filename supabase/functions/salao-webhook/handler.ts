@@ -16,6 +16,7 @@ import {
   CacheAgendaSupabase,
   clienteServico,
   exigirEnv,
+  RepositorioExecucaoSupabase,
   RepositorioPedidosSupabase,
   RepositorioPropostasSupabase,
   RepositorioSupabase,
@@ -31,6 +32,7 @@ import {
   receberComprovante,
 } from '../_shared/agendamento.ts';
 import { type DepsBot, processarMensagem } from '../_shared/bot.ts';
+import { executarPedido } from '../_shared/execucao.ts';
 import {
   avisarEquipe,
   avisarEquipeWhatsapp,
@@ -156,6 +158,44 @@ async function tratarInterno(req: Request): Promise<Response> {
       new CacheAgendaSupabase(db),
     )
     : null;
+  // Cancelar/remarcar pela IA: só com o painel configurado (agenda real). Cada ação é
+  // registrada como pedido "Feito pela IA" no painel e avisada por e-mail à Bruna.
+  const execRepo = new RepositorioExecucaoSupabase(db);
+  const automatico = painel
+    ? {
+      feitosDesde: (conversaId: string, desde: Date) =>
+        execRepo.feitosPelaIADesde(conversaId, desde),
+      fazer: async (pedidoId: string, contexto: { waId: string }) => {
+        const r = await executarPedido(
+          {
+            repo: execRepo,
+            painel,
+            enviar: (para, texto) => enviarTexto(wa, para, texto),
+            registrarSaida: (conversaId, texto, envio) =>
+              repo.registrarSaida(conversaId, 'bot', texto, envio),
+            log: logar,
+          },
+          pedidoId,
+          { origem: 'ia' },
+        );
+        try {
+          await avisarResumo(
+            r.ok
+              ? 'IA do salão: agenda alterada pela IA'
+              : 'IA do salão: a IA não conseguiu alterar a agenda',
+            `${r.mensagem}\n\nCliente: +${contexto.waId}\n${
+              r.ok
+                ? 'Se precisar desfazer, ajuste no Minha Agenda.'
+                : 'O pedido ficou no painel do salão para você resolver.'
+            }\n`,
+          );
+        } catch (e) {
+          logar('erro_aviso_email', { erro: String(e) });
+        }
+        return r;
+      },
+    }
+    : undefined;
   const agendador = agendarLigado ? new AgendadorMinhaAgenda(chaveFirebase!) : undefined;
   const propostas = agendarLigado ? new RepositorioPropostasSupabase(db) : undefined;
   const pedidos = new RepositorioPedidosSupabase(db);
@@ -206,6 +246,7 @@ async function tratarInterno(req: Request): Promise<Response> {
           propostas,
           pedidos,
           painel: painel ?? undefined,
+          automatico,
           pix,
           avisar: avisarResumo,
           log: logar,

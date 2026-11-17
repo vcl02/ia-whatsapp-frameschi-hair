@@ -30,7 +30,8 @@ Deno.test('prompt contém só os dados configurados', () => {
   assertStringIncludes(s, 'Seu nome é Lia');
   assertStringIncludes(s, 'parágrafos curtos, separados por uma linha em branco');
   assertStringIncludes(s, 'POR QUE está chamando a Bruna');
-  assertStringIncludes(s, 'O sinal de 20% não é devolvido');
+  assertStringIncludes(s, 'o sinal de 20% não é devolvido');
+  assertStringIncludes(s, 'VOCÊ faz, mas só depois de a cliente confirmar');
 });
 
 Deno.test('valida o formato da decisão', () => {

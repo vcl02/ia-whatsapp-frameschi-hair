@@ -895,6 +895,19 @@ export class RepositorioExecucaoSupabase implements RepositorioExecucao {
     );
   }
 
+  /** Quantos cancelamentos/remarcações a IA fez nesta conversa desde `desde`. */
+  async feitosPelaIADesde(conversaId: string, desde: Date): Promise<number> {
+    const { count, error } = await this.db
+      .from('salao_pedidos')
+      .select('id', { count: 'exact', head: true })
+      .eq('conversa_id', conversaId)
+      .eq('status', 'feito')
+      .like('resultado', 'Feito pela IA%')
+      .gte('feito_em', desde.toISOString());
+    if (error) throw error;
+    return count ?? 0;
+  }
+
   async liberar(id: string, erro: string): Promise<void> {
     checar(
       await this.db

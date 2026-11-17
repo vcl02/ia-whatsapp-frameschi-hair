@@ -181,3 +181,21 @@ Deno.test('seCruzam e corpo da remarcação', () => {
   }
   assert(recusou);
 });
+
+Deno.test('origem IA: texto de cancelamento lembra o sinal, resultado marcado e avisada=true', async () => {
+  const t = montar(pedido());
+  const r = await executarPedido(t.deps, 'pd1', { origem: 'ia' });
+  assert(r.ok && r.avisada);
+  assertStringIncludes(t.enviados[0], 'foi cancelado');
+  assertStringIncludes(t.enviados[0], 'sinal de 20% não é devolvido');
+  assertStringIncludes(t.estado.concluido, 'Feito pela IA.');
+});
+
+Deno.test('origem painel: texto da Bruna, sem a frase do sinal e sem marca de IA', async () => {
+  const t = montar(pedido());
+  const r = await executarPedido(t.deps, 'pd1');
+  assertStringIncludes(t.enviados[0], 'A Bruna confirmou o cancelamento');
+  assertEquals(t.enviados[0].includes('sinal'), false);
+  assertEquals(t.estado.concluido.startsWith('Feito pela IA'), false);
+  assert(r.ok);
+});

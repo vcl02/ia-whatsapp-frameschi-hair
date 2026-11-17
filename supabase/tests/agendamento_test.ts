@@ -222,6 +222,7 @@ function cenario(
     semPix?: boolean;
     semLimiteDiario?: boolean;
     painel?: DepsFerramentas['painel'];
+    automatico?: DepsFerramentas['automatico'];
   } = {},
 ) {
   const propostas = new PropostasMemoria();
@@ -260,6 +261,7 @@ function cenario(
     pedidos,
     pix: opcoes.semPix ? undefined : PIX,
     painel: opcoes.painel,
+    automatico: opcoes.automatico,
     maxDias: 15,
     ...comuns,
   };
@@ -553,9 +555,9 @@ Deno.test('contexto da IA: agendamento ativo traz o roteiro de cancelamento; pas
     t,
     'Banho de Lua, terça-feira, 10/11, às 09:00, com Bruna, no nome de Isa, sinal de R$ 6,00',
   );
-  assertStringIncludes(t, 'remarcar_ou_cancelar');
-  assertStringIncludes(t, 'registrar_pedido_para_bruna');
-  assertStringIncludes(t, 'O sinal NÃO é devolvido');
+  assertStringIncludes(t, 'cancelar_ou_remarcar_agendamento');
+  assertStringIncludes(t, 'Só depois do "sim" dela');
+  assertStringIncludes(t, 'o sinal NÃO é devolvido');
   // depois do dia do agendamento, não é mais ativo
   assertEquals(
     await contextoDoAgendamento(c.propostas, 'c1', new Date('2026-11-12T12:00:00Z'), sem),
@@ -602,7 +604,7 @@ const CANCELAR = {
 
 Deno.test('pedir remarcação: registra para a Bruna, NÃO agenda e não mexe no Minha Agenda', async () => {
   const c = await comAgendamento();
-  const r = await c.ferramentas().executar('registrar_pedido_para_bruna', PEDIR);
+  const r = await c.ferramentas().executar('cancelar_ou_remarcar_agendamento', PEDIR);
   assertStringIncludes(r, 'PEDIDO REGISTRADO');
   assertStringIncludes(r, 'Ainda NÃO foi remarcado');
   assertEquals(c.agendados.length, 0);
@@ -622,7 +624,7 @@ Deno.test('pedir remarcação: registra para a Bruna, NÃO agenda e não mexe no
 
 Deno.test('pedir cancelamento: registra, marca o agendamento e lembra do sinal', async () => {
   const c = await comAgendamento();
-  const r = await c.ferramentas().executar('registrar_pedido_para_bruna', CANCELAR);
+  const r = await c.ferramentas().executar('cancelar_ou_remarcar_agendamento', CANCELAR);
   assertStringIncludes(r, 'Ainda NÃO foi cancelado');
   assertStringIncludes(r, 'sinal de 20% não é devolvido');
   assertEquals(c.pedidos.itens[0].tipo, 'cancelar');
@@ -633,14 +635,14 @@ Deno.test('pedir cancelamento: registra, marca o agendamento e lembra do sinal',
 Deno.test('pedido: faltando menos de 24 h o pedido sai com alerta para a Bruna', async () => {
   const c = await comAgendamento();
   c.avancar(49 * 60 * 60_000); // faltam 23 h para 10/11 09:00
-  await c.ferramentas().executar('registrar_pedido_para_bruna', CANCELAR);
+  await c.ferramentas().executar('cancelar_ou_remarcar_agendamento', CANCELAR);
   assertStringIncludes(c.pedidos.itens[0].observacao, 'menos de 24 horas');
 });
 
 Deno.test('pedir remarcação: horário ocupado, profissional errada, mesmo horário e data longe não registram', async () => {
   const c = await comAgendamento();
   const pedir = (extra: Record<string, string>) =>
-    c.ferramentas().executar('registrar_pedido_para_bruna', { ...PEDIR, ...extra });
+    c.ferramentas().executar('cancelar_ou_remarcar_agendamento', { ...PEDIR, ...extra });
   assertStringIncludes(await pedir({ novo_hora: '10:00' }), 'não está livre');
   assertStringIncludes(
     await pedir({ novo_profissional: 'Joana' }),
@@ -659,10 +661,10 @@ Deno.test('pedido sem agendamento do bot: exige o horário informado e não conf
   const c = cenario();
   const f = c.ferramentas();
   assertStringIncludes(
-    await f.executar('registrar_pedido_para_bruna', CANCELAR),
+    await f.executar('cancelar_ou_remarcar_agendamento', CANCELAR),
     'preenchendo horario_atual',
   );
-  const r = await f.executar('registrar_pedido_para_bruna', {
+  const r = await f.executar('cancelar_ou_remarcar_agendamento', {
     ...PEDIR,
     horario_atual: 'escova, quinta 12/11 às 15h',
   });
@@ -676,14 +678,14 @@ Deno.test('pedido sem agendamento do bot: exige o horário informado e não conf
 Deno.test('pedido: tipo inválido e falha do banco mandam passar para a Bruna', async () => {
   const c = await comAgendamento();
   assertStringIncludes(
-    await c.ferramentas().executar('registrar_pedido_para_bruna', {
+    await c.ferramentas().executar('cancelar_ou_remarcar_agendamento', {
       ...PEDIR,
       tipo: 'x',
     }),
     'tipo inválido',
   );
   c.pedidos.falhar = true;
-  const r = await c.ferramentas().executar('registrar_pedido_para_bruna', CANCELAR);
+  const r = await c.ferramentas().executar('cancelar_ou_remarcar_agendamento', CANCELAR);
   assertStringIncludes(r, 'não consegui registrar');
   assertStringIncludes(r, 'passar_para_humano = true');
   assertEquals(c.propostas.cancelamentosPedidos.length, 0);
@@ -691,8 +693,8 @@ Deno.test('pedido: tipo inválido e falha do banco mandam passar para a Bruna', 
 
 Deno.test('novo pedido da mesma conversa substitui o pendente anterior', async () => {
   const c = await comAgendamento();
-  await c.ferramentas().executar('registrar_pedido_para_bruna', PEDIR);
-  await c.ferramentas().executar('registrar_pedido_para_bruna', {
+  await c.ferramentas().executar('cancelar_ou_remarcar_agendamento', PEDIR);
+  await c.ferramentas().executar('cancelar_ou_remarcar_agendamento', {
     ...PEDIR,
     novo_hora: '09:00',
   });
@@ -802,7 +804,7 @@ Deno.test('pedido com agendamento da agenda real: só aceita id desta cliente e 
   };
   const c = cenario({ painel: { daCliente: () => Promise.resolve([real]) } });
   assertStringIncludes(
-    await c.ferramentas().executar('registrar_pedido_para_bruna', {
+    await c.ferramentas().executar('cancelar_ou_remarcar_agendamento', {
       ...CANCELAR,
       agendamento_sistema_id: 999,
     }),
@@ -810,7 +812,7 @@ Deno.test('pedido com agendamento da agenda real: só aceita id desta cliente e 
   );
   assertEquals(c.pedidos.itens.length, 0);
   assertStringIncludes(
-    await c.ferramentas().executar('registrar_pedido_para_bruna', {
+    await c.ferramentas().executar('cancelar_ou_remarcar_agendamento', {
       ...CANCELAR,
       agendamento_sistema_id: 555,
     }),
@@ -844,4 +846,103 @@ Deno.test('mensagem de confirmação no modelo da Bruna', () => {
     ].join('\n'),
   );
   assertEquals(diaPorExtenso('2026-11-21'), '(Sábado) 21 de Novembro');
+});
+
+const REAL = {
+  id: 555,
+  data: '2026-11-10',
+  inicio: '09:00',
+  fim: '10:00',
+  profissionalId: 486643,
+  profissionalNome: 'Bruna',
+  servicoId: 5732343,
+  servico: 'Banho de Lua',
+  preco: 30,
+  clienteNome: 'Isa',
+  telefones: ['11992090474'],
+};
+
+function comAutomatico(
+  real = REAL,
+  feitos = 0,
+  resultado = { ok: true, mensagem: 'Cancelado.', avisada: true },
+) {
+  const feitosChamadas: string[] = [];
+  const c = cenario({
+    painel: { daCliente: () => Promise.resolve([real]) },
+    automatico: {
+      fazer: (id) => (feitosChamadas.push(id), Promise.resolve(resultado)),
+      feitosDesde: () => Promise.resolve(feitos),
+    },
+  });
+  return { c, feitosChamadas };
+}
+const COM_ID = { ...CANCELAR, agendamento_sistema_id: 555 };
+
+Deno.test('IA cancela sozinha: executa, manda deixar a resposta vazia e não chama a Bruna', async () => {
+  const { c, feitosChamadas } = comAutomatico();
+  const r = await c.ferramentas().executar('cancelar_ou_remarcar_agendamento', COM_ID);
+  assertStringIncludes(r, 'CANCELADO no sistema');
+  assertStringIncludes(r, 'JÁ foi enviada');
+  assertStringIncludes(r, 'passar_para_humano = false');
+  assertEquals(feitosChamadas.length, 1);
+});
+
+Deno.test('IA remarca sozinha: confirmação não enviada vira texto para a IA dizer', async () => {
+  const { c } = comAutomatico(REAL, 0, {
+    ok: true,
+    mensagem: 'Remarcado.',
+    avisada: false,
+  });
+  const r = await c.ferramentas().executar('cancelar_ou_remarcar_agendamento', {
+    ...PEDIR,
+    agendamento_sistema_id: 555,
+    novo_data: '2026-11-12',
+    novo_hora: '11:00',
+    novo_profissional: 'Bruna',
+  });
+  assertStringIncludes(r, 'REMARCADO no sistema, mas NÃO consegui enviar a confirmação');
+});
+
+Deno.test('menos de 24 h para o horário: não executa, registra para a Bruna', async () => {
+  const { c, feitosChamadas } = comAutomatico({
+    ...REAL,
+    data: '2026-11-08',
+    inicio: '08:00',
+  });
+  const r = await c.ferramentas().executar('cancelar_ou_remarcar_agendamento', COM_ID);
+  assertStringIncludes(r, 'PEDIDO REGISTRADO');
+  assertStringIncludes(r, 'faltam menos de 24 horas');
+  assertEquals(feitosChamadas.length, 0);
+  assertEquals(c.pedidos.itens.length, 1);
+});
+
+Deno.test('limite de mudanças da IA por conversa por dia: não executa', async () => {
+  const { c, feitosChamadas } = comAutomatico(REAL, 2);
+  const r = await c.ferramentas().executar('cancelar_ou_remarcar_agendamento', COM_ID);
+  assertStringIncludes(r, 'mudanças demais hoje');
+  assertEquals(feitosChamadas.length, 0);
+});
+
+Deno.test('execução falhou (horário ocupado, vários serviços...): pedido fica para a Bruna', async () => {
+  const { c } = comAutomatico(REAL, 0, {
+    ok: false,
+    mensagem: 'Não fiz nada no Minha Agenda: o novo horário já está ocupado.',
+    avisada: false,
+  });
+  const r = await c.ferramentas().executar('cancelar_ou_remarcar_agendamento', COM_ID);
+  assertStringIncludes(r, 'PEDIDO REGISTRADO');
+  assertStringIncludes(r, 'já está ocupado');
+  assertStringIncludes(r, 'passar_para_humano = true');
+});
+
+Deno.test('sem o id da agenda real (0): não executa sozinho', async () => {
+  const { c, feitosChamadas } = comAutomatico();
+  const r = await c.ferramentas().executar('cancelar_ou_remarcar_agendamento', {
+    ...CANCELAR,
+    agendamento_sistema_id: 0,
+    horario_atual: 'escova terça 9h',
+  });
+  assertStringIncludes(r, 'não está na agenda real');
+  assertEquals(feitosChamadas.length, 0);
 });

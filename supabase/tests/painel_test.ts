@@ -208,7 +208,7 @@ Deno.test('agenda real: lista os horários da cliente e acerta o agendamento do 
   );
   assertStringIncludes(t, 'FONTE DA VERDADE');
   assertStringIncludes(t, 'Progressiva, quinta-feira, 19/11, às 13:00, com Bruna');
-  assertStringIncludes(t, 'registrar_pedido_para_bruna');
+  assertStringIncludes(t, 'cancelar_ou_remarcar_agendamento');
   assertEquals(b.mudancas, ['p1:cancelado_no_sistema']);
   // o agendamento do bot que sumiu aparece uma vez só, como não estando mais na agenda
   assertEquals(t.split('NÃO está mais na agenda').length - 1, 1);

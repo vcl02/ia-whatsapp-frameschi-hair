@@ -344,3 +344,24 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
   `lerConfigsAviso` só usa contas completas. Resumo de erros e da sincronização, que usam
   só a conta principal, passam a ser apenas registrados no log (os erros continuam no
   painel).
+
+## Cancelar e remarcar pela IA — 2026-11-17
+
+- Decisão do Victor: a IA cancela e remarca sozinha (ferramenta
+  `cancelar_ou_remarcar_agendamento`, que substitui `registrar_pedido_para_bruna`). Antes
+  de chamar, a IA confirma com a cliente: no cancelamento avisa que o sinal de 20% não é
+  devolvido (regra da Bruna) e pergunta se confirma; na remarcação mostra o horário livre.
+- Travas no código (valores ajustáveis em `agendamento.ts`):
+  - só executa com o agendamento da agenda real (`[agendamento N]`) e do telefone da
+    conversa; senão registra o pedido para a Bruna;
+  - antecedência mínima de 24 h até o horário atual (suposição minha, igual à regra do
+    agendamento online; abaixo disso o pedido vai para a Bruna decidir);
+  - no máximo 2 mudanças da IA por conversa a cada 24 h (`MAX_ACOES_AUTOMATICAS_DIA`);
+  - na remarcação, `executarPedido` lê o dia novo sem cache e recusa horário ocupado;
+    agendamento com mais de um serviço ou com produto não é remarcado.
+- Cada ação vira um pedido "Feito pela IA" no painel (histórico) e a Bruna recebe e-mail
+  com o que foi feito. O sistema manda a confirmação à cliente (a IA deixa a resposta
+  vazia). Se algo falha, o pedido fica pendente no painel com o motivo, e o botão "Fazer
+  no Minha Agenda" continua valendo.
+- Fica de fora (não verificado): se desfazer um cancelamento é possível; o `DELETE` apaga
+  o agendamento como o botão de excluir do portal (visto no HAR de 2026-11-16).

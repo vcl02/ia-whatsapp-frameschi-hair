@@ -97,11 +97,12 @@ export const DEF_PROPOR: DefinicaoFerramenta = {
 };
 
 export const DEF_PEDIDO: DefinicaoFerramenta = {
-  name: 'registrar_pedido_para_bruna',
+  name: 'cancelar_ou_remarcar_agendamento',
   description:
-    'Registra no painel da Bruna um pedido de CANCELAMENTO ou de REMARCAÇÃO, já com todos os dados coletados. ' +
-    'NÃO cancela nem remarca nada: a Bruna finaliza no Minha Agenda e avisa a cliente. ' +
-    'Para remarcar, use só depois de consultar_horarios mostrar o novo horário livre e a cliente confirmar. ' +
+    'CANCELA ou REMARCA um agendamento da cliente no Minha Agenda. Use SÓ depois que a cliente confirmou com clareza ' +
+    '(cancelar: sabendo que o sinal não é devolvido; remarcar: depois de consultar_horarios mostrar o novo horário livre). ' +
+    'O sistema confere tudo de novo, faz a alteração e já manda a confirmação à cliente. ' +
+    'Se não puder fazer sozinho (menos de 24 h para o horário, limite do dia, horário ocupado), registra o pedido para a Bruna. ' +
     'Campos que não se aplicam vão como texto vazio.',
   strict: true,
   input_schema: {
@@ -464,6 +465,7 @@ export interface DepsFerramentas {
   pedidos?: RepositorioPedidos; // ausente = a IA não registra pedidos (só passa para a Bruna)
   /** Agenda real (painel): confere se o agendamento do pedido é mesmo desta cliente. */
   painel?: Pick<PainelMinhaAgenda, 'daCliente'>;
+  automatico?: ExecucaoAutomatica;
   avisar: (assunto: string, texto: string) => Promise<void>;
   log: (evento: string, dados?: Record<string, unknown>) => void;
   maxDias: number;
@@ -471,6 +473,18 @@ export interface DepsFerramentas {
 }
 
 export const VALIDADE_PROPOSTA_MS = 30 * 60_000;
+/** Travas do cancelamento/remarcação feitos pela IA (decisão de 2026-11-17, ajustáveis). */
+export const ANTECEDENCIA_MINIMA_AUTOMATICA_MS = 24 * 60 * 60_000;
+export const MAX_ACOES_AUTOMATICAS_DIA = 2;
+
+/** Quem executa de verdade no Minha Agenda (ausente = a IA só registra o pedido para a Bruna). */
+export interface ExecucaoAutomatica {
+  fazer(
+    pedidoId: string,
+    contexto: { waId: string },
+  ): Promise<{ ok: boolean; mensagem: string; avisada: boolean }>;
+  feitosDesde(conversaId: string, desde: Date): Promise<number>;
+}
 const MAX_AGENDAMENTOS_DIA = 1;
 
 export function montarFerramentas(
@@ -672,8 +686,9 @@ export function montarFerramentas(
     if (!deps.pedidos) {
       return 'o registro de pedidos não está disponível: diga que a Bruna vai ajudar, e marque passar_para_humano = true com intencao = remarcar_ou_cancelar';
     }
+    let pedidoId: string;
     try {
-      await deps.pedidos.criar({
+      pedidoId = await deps.pedidos.criar({
         conversaId: ctx.conversaId,
         agendamentoId: atual?.id ?? null,
         agendamentoSistemaId: doSistema?.id ?? null,
@@ -692,20 +707,56 @@ export function montarFerramentas(
         observacao: [texto(e.observacao_para_bruna, 500), ...alertas].filter(Boolean)
           .join(' | '),
       });
-      if (tipo === 'cancelar' && atual) {
-        await deps.propostas!.marcarCancelamentoPedido(
-          ctx.conversaId,
-          hojeSaoPaulo(agora()),
-        );
-      }
     } catch (err) {
       deps.log('erro_pedido', { conversa: ctx.conversaId, erro: String(err) });
       return 'não consegui registrar o pedido agora: diga que a Bruna vai ajudar, e marque passar_para_humano = true com intencao = remarcar_ou_cancelar';
     }
+
+    // Travas: só executa sozinho com o agendamento da agenda real (já conferido pelo
+    // telefone), com antecedência suficiente e dentro do limite diário de ações da IA.
+    let motivoSemAutomatico: string | null = null;
+    if (!deps.automatico) {
+      motivoSemAutomatico = 'execução automática indisponível';
+    } else if (!doSistema) {
+      motivoSemAutomatico = 'o horário não está na agenda real desta cliente';
+    } else if (
+      Date.parse(`${doSistema.data}T${doSistema.inicio}:00-03:00`) - agora().getTime() <
+        ANTECEDENCIA_MINIMA_AUTOMATICA_MS
+    ) {
+      motivoSemAutomatico = 'faltam menos de 24 horas para o horário';
+    } else if (
+      (await deps.automatico.feitosDesde(
+        ctx.conversaId,
+        new Date(agora().getTime() - 24 * 60 * 60_000),
+      )) >= MAX_ACOES_AUTOMATICAS_DIA
+    ) {
+      motivoSemAutomatico = 'esta conversa já teve mudanças demais hoje';
+    }
+    if (!motivoSemAutomatico) {
+      const r = await deps.automatico!.fazer(pedidoId, { waId: ctx.waId });
+      if (r.ok) {
+        deps.log('agenda_alterada_pela_ia', { conversa: ctx.conversaId, tipo });
+        const feito = tipo === 'cancelar' ? 'CANCELADO' : 'REMARCADO';
+        return r.avisada
+          ? `${feito} no sistema. A confirmação JÁ foi enviada à cliente em outra mensagem: deixe "resposta" vazia (só responda se ela perguntar algo), passar_para_humano = false.`
+          : `${feito} no sistema, mas NÃO consegui enviar a confirmação: diga à cliente, com carinho, que foi ${
+            tipo === 'cancelar' ? 'cancelado' : 'remarcado'
+          } (${r.mensagem}). passar_para_humano = false.`;
+      }
+      motivoSemAutomatico = r.mensagem;
+    }
+
+    // Não deu para fazer sozinho: o pedido fica no painel para a Bruna.
+    if (tipo === 'cancelar' && atual) {
+      await deps.propostas!.marcarCancelamentoPedido(
+        ctx.conversaId,
+        hojeSaoPaulo(agora()),
+      ).catch(() => null);
+    }
     deps.log('pedido_registrado', { conversa: ctx.conversaId, tipo });
     return `PEDIDO REGISTRADO para a Bruna (${
       tipo === 'cancelar' ? 'cancelamento' : 'remarcação'
-    }). Ainda NÃO foi ${
+    }); não deu para fazer sozinho (${motivoSemAutomatico}). Ainda NÃO foi ${
       tipo === 'cancelar' ? 'cancelado' : 'remarcado'
     }: a Bruna finaliza no sistema e avisa a cliente por aqui. Diga isso com carinho${
       tipo === 'cancelar'
@@ -725,7 +776,7 @@ export function montarFerramentas(
       deps.log('ferramenta', { nome }); // só o nome, sem dados da cliente
       if (nome === 'consultar_horarios') return consultar(entrada);
       if (podeAgendar && nome === 'propor_agendamento') return propor(entrada);
-      if (deps.pedidos && nome === 'registrar_pedido_para_bruna') {
+      if (deps.pedidos && nome === 'cancelar_ou_remarcar_agendamento') {
         return pedido(entrada);
       }
       return Promise.resolve(`ferramenta desconhecida: ${nome}`);
@@ -893,7 +944,7 @@ export async function contextoDoAgendamento(
     partes.push(
       `Agendamento ativo desta cliente (feito pelo sistema): ${
         resumoDoAgendamento(ativo)
-      }. Se ela pedir para CANCELAR ou REMARCAR: confirme com ela que é esse horário, pergunte o motivo sem insistir e, para remarcar, o novo dia e horário (consulte com consultar_horarios e só registre com o horário livre e a cliente confirmando). Você NÃO cancela nem remarca: com tudo em mãos, chame registrar_pedido_para_bruna, e a Bruna finaliza no sistema e avisa a cliente. Explique a política de cancelamento do salão (está nas regras do agendamento). O sinal NÃO é devolvido em caso de cancelamento (regra da Bruna): diga isso com carinho e clareza, sem prometer devolução nem crédito. Depois marque passar_para_humano = true e intencao = remarcar_ou_cancelar, e escreva no "motivo" o pedido dela.`,
+      }. Se ela pedir para CANCELAR ou REMARCAR: confirme com ela que é esse horário, pergunte o motivo sem insistir e, para remarcar, o novo dia e horário (consulte com consultar_horarios). No cancelamento, diga com carinho que o sinal NÃO é devolvido (regra da Bruna, sem prometer devolução nem crédito) e pergunte se ela confirma. Só depois do "sim" dela chame cancelar_ou_remarcar_agendamento. Explique a política de cancelamento do salão (está nas regras do agendamento).`,
     );
   }
   return partes.length ? partes.join('\n') : null;
@@ -1013,7 +1064,7 @@ export async function contextoDaAgendaReal(
             a.preco ? `, ${reais(a.preco)}` : ''
           }`
         ).join('\n')
-      }\nSe ela pedir para CANCELAR ou REMARCAR um desses horários, siga o roteiro: confirme qual é, pergunte o motivo sem insistir e, para remarcar, o novo dia e horário (consulte com consultar_horarios); com tudo em mãos, chame registrar_pedido_para_bruna com agendamento_sistema_id = o número entre colchetes desse horário. Você não cancela nem remarca. Não chame registrar_pedido_para_bruna se ela não pediu para cancelar ou remarcar.`,
+      }\nSe ela pedir para CANCELAR ou REMARCAR um desses horários, siga o roteiro: confirme qual é, pergunte o motivo sem insistir e, para remarcar, o novo dia e horário (consulte com consultar_horarios); com tudo em mãos e ela confirmando, chame cancelar_ou_remarcar_agendamento com agendamento_sistema_id = o número entre colchetes desse horário (no cancelamento, avise antes que o sinal não é devolvido). Só chame se ela pediu para cancelar ou remarcar e confirmou.`,
     );
   }
   for (const r of removidos) {

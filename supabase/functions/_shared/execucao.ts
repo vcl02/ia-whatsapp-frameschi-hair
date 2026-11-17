@@ -1,5 +1,7 @@
-// Execução de um pedido de cancelamento/remarcação DEPOIS que a Bruna aprova no painel do
-// salão (função salao-executar-pedido). A IA nunca chega aqui: ela só registra o pedido.
+// Execução de um pedido de cancelamento/remarcação no Minha Agenda. Dois caminhos:
+//  - a Bruna aprova no painel do salão (função salao-executar-pedido);
+//  - a IA, na conversa, depois que a cliente confirmou (ferramenta
+//    cancelar_ou_remarcar_agendamento), dentro das travas dessa ferramenta.
 // Antes de mexer na agenda, confere de novo: o agendamento é da cliente do pedido e, na
 // remarcação, o novo horário está livre com a profissional. Qualquer dúvida = não faz nada.
 
@@ -72,22 +74,39 @@ export function seCruzam(
   return a0 < b1 && b0 < a1;
 }
 
+export interface ResultadoExecucao {
+  ok: boolean;
+  mensagem: string;
+  /** A cliente recebeu a confirmação pelo WhatsApp. */
+  avisada: boolean;
+}
+
 export async function executarPedido(
   deps: DepsExecucao,
   pedidoId: string,
-): Promise<{ ok: boolean; mensagem: string }> {
+  opcoes: { origem?: 'ia' | 'painel' } = {},
+): Promise<ResultadoExecucao> {
+  const porIA = opcoes.origem === 'ia';
+  const prefixo = porIA ? 'Feito pela IA. ' : '';
   const agora = (deps.agora ?? (() => new Date()))();
   const p = await deps.repo.carregar(pedidoId);
-  if (!p) return { ok: false, mensagem: 'Pedido não encontrado ou já resolvido.' };
+  if (!p) {
+    return {
+      ok: false,
+      avisada: false,
+      mensagem: 'Pedido não encontrado ou já resolvido.',
+    };
+  }
   if ((p.tipo !== 'cancelar' && p.tipo !== 'remarcar') || !p.agendamentoSistemaId) {
     return {
       ok: false,
+      avisada: false,
       mensagem:
         'Este pedido não dá para fazer automaticamente: faça no Minha Agenda e clique em Feito.',
     };
   }
   if (!(await deps.repo.reservar(p.id))) {
-    return { ok: false, mensagem: 'Este pedido já está sendo feito.' };
+    return { ok: false, avisada: false, mensagem: 'Este pedido já está sendo feito.' };
   }
   let feitoNoSistema = false;
   try {
@@ -108,9 +127,13 @@ export async function executarPedido(
       resultado = `Cancelado no Minha Agenda: ${servico}, ${
         dataCurta(dataAtual)
       }, às ${horaAtual}.`;
-      texto = `Oi! A Bruna confirmou o cancelamento do seu horário de ${servico} (${
-        dataCurta(dataAtual)
-      }, às ${horaAtual}). 💖 Se quiser marcar outro dia, é só me chamar por aqui.`;
+      texto = porIA
+        ? `Pronto, seu horário de ${servico} (${
+          dataCurta(dataAtual)
+        }, às ${horaAtual}) foi cancelado. 💖 Lembrando que o sinal de 20% não é devolvido, tá? Se quiser marcar outro dia, é só me chamar por aqui.`
+        : `Oi! A Bruna confirmou o cancelamento do seu horário de ${servico} (${
+          dataCurta(dataAtual)
+        }, às ${horaAtual}). 💖 Se quiser marcar outro dia, é só me chamar por aqui.`;
     } else {
       if (!p.novoData || !p.novoHora || !p.novoProfissional) {
         throw new Error('o pedido não tem o novo dia, horário e profissional');
@@ -160,9 +183,11 @@ export async function executarPedido(
     }
 
     // Avisa a cliente se ainda estiver na janela de 24 h do WhatsApp.
+    let avisada = false;
     if (dentroDaJanela(p.ultimoInbound, agora)) {
       const envio = await deps.enviar(p.waId, texto);
       await deps.registrarSaida(p.conversaId, texto, envio);
+      avisada = envio.ok;
       resultado += envio.ok
         ? ' A cliente foi avisada pelo WhatsApp.'
         : ' NÃO consegui avisar a cliente pelo WhatsApp: avise pelo app.';
@@ -170,23 +195,29 @@ export async function executarPedido(
       resultado +=
         ' A cliente NÃO foi avisada (passou da janela de 24 h do WhatsApp): avise pelo app.';
     }
+    resultado = prefixo + resultado;
     await deps.repo.concluir(p.id, resultado);
-    deps.log('pedido_executado', { pedido: p.id, tipo: p.tipo });
-    return { ok: true, mensagem: resultado };
+    deps.log('pedido_executado', {
+      pedido: p.id,
+      tipo: p.tipo,
+      origem: porIA ? 'ia' : 'painel',
+    });
+    return { ok: true, mensagem: resultado, avisada };
   } catch (e) {
     const motivo = e instanceof Error ? e.message : String(e);
     if (feitoNoSistema) {
       // A agenda já mudou: o pedido está feito, só o passo seguinte falhou.
       const r =
-        `Feito no Minha Agenda, mas houve um problema depois: ${motivo}. Avise a cliente pelo app.`;
+        `${prefixo}Feito no Minha Agenda, mas houve um problema depois: ${motivo}. Avise a cliente pelo app.`;
       await deps.repo.concluir(p.id, r);
       deps.log('erro_execucao_pedido', { pedido: p.id, erro: motivo, feito: true });
-      return { ok: true, mensagem: r };
+      return { ok: true, mensagem: r, avisada: false };
     }
     await deps.repo.liberar(p.id, motivo);
     deps.log('erro_execucao_pedido', { pedido: p.id, erro: motivo });
     return {
       ok: false,
+      avisada: false,
       mensagem:
         `Não fiz nada no Minha Agenda: ${motivo}. Confira e, se precisar, faça à mão.`,
     };
