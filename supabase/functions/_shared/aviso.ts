@@ -7,7 +7,11 @@
 import type { Conversa } from './bot.ts';
 import { normalizarNumero, type ResultadoEnvio } from './whatsapp.ts';
 
-/** Modelo (template) aprovado na Meta para avisar a equipe. Corpo: {{1}} cliente, {{2}} motivo. */
+/**
+ * Modelo (template) aprovado na Meta para avisar a equipe. Corpo: "Aviso da assistente Lia:
+ * a cliente {{1}} (telefone {{2}}) precisa de atendimento humano. Motivo: {{3}}. Responda a
+ * ela pelo WhatsApp Business do salão." O cabeçalho é texto fixo, sem variável.
+ */
 export const MODELO_AVISO_WHATSAPP = 'aviso_atendimento_equipe';
 export const IDIOMA_AVISO_WHATSAPP = 'pt_BR';
 
@@ -122,7 +126,7 @@ function paraVariavel(t: string, max: number): string {
 }
 
 /**
- * Avisa a equipe pelo WhatsApp com o modelo aprovado ({{1}} cliente, {{2}} motivo).
+ * Avisa a equipe pelo WhatsApp com o modelo aprovado ({{1}} nome, {{2}} telefone, {{3}} motivo).
  * Um número que falha não impede os outros. Nada do texto da conversa vai no aviso.
  */
 export async function avisarEquipeWhatsapp(
@@ -138,15 +142,15 @@ export async function avisarEquipeWhatsapp(
   motivo: string,
 ): Promise<void> {
   if (numeros.length === 0) return;
-  const cliente = paraVariavel(
-    c.nomePerfil ? `${c.nomePerfil} (+${c.waId})` : `+${c.waId}`,
-    120,
-  );
-  const mot = paraVariavel(motivo, 400);
+  const nome = paraVariavel(c.nomePerfil ?? 'sem nome', 80);
+  const telefone = paraVariavel(c.waId, 20);
+  // O modelo já põe o ponto final depois do motivo.
+  const mot = paraVariavel(motivo, 400).replace(/[.\s]+$/, '') || '-';
   for (const numero of numeros) {
     try {
       const r = await enviarModelo(numero, MODELO_AVISO_WHATSAPP, IDIOMA_AVISO_WHATSAPP, [
-        cliente,
+        nome,
+        telefone,
         mot,
       ]);
       log('aviso_equipe', {

@@ -333,10 +333,10 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
   (os mesmos nomes com `_BRUNA`). Cada uma envia com a sua chave; falha de uma não impede
   a outra. Os resumos de erro e da sincronização continuam só na conta principal.
 - Aviso "conversa precisa de você" também pelo WhatsApp, com o modelo
-  `aviso_atendimento_equipe` (pt_BR, aprovado na Meta em 2026-11-17): `{{1}}` cliente
-  (nome e número) e `{{2}}` motivo, sem o texto da conversa. Números em
-  `SALAO_AVISO_WHATSAPP_PARA` (secret, nunca no repositório). Enviado pelo número do
-  salão; o texto do modelo e o idioma ficam no código, não em secrets.
+  `aviso_atendimento_equipe` (pt_BR, aprovado na Meta em 2026-11-17): `{{1}}` nome da
+  cliente, `{{2}}` telefone e `{{3}}` motivo (cabeçalho fixo), sem o texto da conversa.
+  Números em `SALAO_AVISO_WHATSAPP_PARA` (secret, nunca no repositório). Enviado pelo
+  número do salão; o texto do modelo e o idioma ficam no código, não em secrets.
 - Falha de e-mail (por exemplo 403) e de WhatsApp agora viram `erro_aviso_email` /
   `erro_aviso_whatsapp` e aparecem no painel de erros. Os status de entrega desse aviso
   não são gravados (o número da Bruna não está na lista de teste).

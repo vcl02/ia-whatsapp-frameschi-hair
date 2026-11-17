@@ -145,15 +145,26 @@ Deno.test('aviso por WhatsApp: modelo aviso_atendimento_equipe com cliente e mot
     },
     (e) => void logs.push(e),
     conversa,
-    'pediu a Bruna\n\ne    mais   coisa',
+    'pediu a Bruna\n\ne    mais   coisa.',
   );
   assertEquals(chamadas.length, 2); // o primeiro falhar não impede o segundo
   assertEquals(chamadas[0].slice(1), [
     'aviso_atendimento_equipe',
     'pt_BR',
-    ['Ana (+5511999990000)', 'pediu a Bruna e mais coisa'],
+    ['Ana', '5511999990000', 'pediu a Bruna e mais coisa'],
   ]);
   assertEquals(logs.filter((l) => l === 'erro_aviso_whatsapp').length, 1);
+  // sem nome no perfil: não manda variável vazia
+  await avisarEquipeWhatsapp(
+    ['5511988973181'],
+    (_p, _m, _i, params) => {
+      assertEquals(params, ['sem nome', '5511999990000', 'x']);
+      return Promise.resolve(ok);
+    },
+    () => {},
+    { ...conversa, nomePerfil: null },
+    'x',
+  );
   // sem números: não faz nada
   await avisarEquipeWhatsapp(
     [],
