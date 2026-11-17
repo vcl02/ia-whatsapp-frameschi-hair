@@ -38,10 +38,9 @@ jobs:
           deno-version: v2.x
       - name: Validar antes de publicar (lint, formato, tipos e testes)
         run: deno task validar
+      # A CLI vem do npm (o setup-cli consultava a API do GitHub e esbarrava no limite de uso).
       - name: Configurar Supabase CLI
-        uses: supabase/setup-cli@v1
-        with:
-          version: latest
+        run: npm install --global supabase@latest && supabase --version
       - name: Publicar
         run: |
           if [ "${{ inputs.funcao }}" = "todas" ]; then
