@@ -317,6 +317,38 @@ export function corpoRemarcacao(
   };
 }
 
+/**
+ * Cópia do agendamento para dar para marcar de novo igual, se foi engano. Só o necessário:
+ * nada de CPF, e-mail, endereço ou data de nascimento da cliente.
+ */
+export function copiaDoAgendamento(a: Obj): Record<string, unknown> {
+  const c = obj(a.customer);
+  const sv = obj(a.service);
+  return {
+    id: a.id,
+    data: a.date,
+    inicio: a.startTime,
+    fim: a.endTime,
+    duracao: a.duration,
+    profissionalId: a.userId,
+    profissional: str(obj(a.user).name),
+    cliente: {
+      id: a.customerId,
+      nome: str(c.name),
+      telefones: [c.phone1, c.phone2, c.phoneInternational].filter(
+        (t) => typeof t === 'string' && t,
+      ),
+    },
+    servico: { id: a.serviceId, nome: str(sv.name), preco: a.price ?? sv.price },
+    comentarios: a.comments ?? null,
+    pagamento: { forma: a.paymentMethod ?? null, pago: a.totalPaid ?? null },
+    desconto: a.discount ?? null,
+    desconto_em_percentual: a.discountInPercentage ?? false,
+    marcado_online: a.onlineScheduled ?? null,
+    criado_em: a.createdAt ?? null,
+  };
+}
+
 /** Telefones do cadastro da cliente de um agendamento completo (só dígitos). */
 export function telefonesDoAgendamento(a: Obj): string[] {
   const c = obj(a.customer);

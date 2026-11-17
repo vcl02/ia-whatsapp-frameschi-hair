@@ -1,7 +1,7 @@
 {
   "tasks": {
     "test": "deno test --allow-env --allow-read supabase/tests",
-    "check": "deno check supabase/functions/salao-webhook/index.ts supabase/functions/salao-responder/index.ts supabase/functions/salao-webhook/handler.ts supabase/functions/salao-responder/handler.ts supabase/functions/salao-sincronizar/index.ts supabase/functions/salao-executar-pedido/index.ts",
+    "check": "deno check supabase/functions/salao-webhook/index.ts supabase/functions/salao-responder/index.ts supabase/functions/salao-webhook/handler.ts supabase/functions/salao-responder/handler.ts supabase/functions/salao-sincronizar/index.ts supabase/functions/salao-executar-pedido/index.ts supabase/functions/salao-lembrete/index.ts supabase/functions/salao-lembrete/handler.ts",
     "lint": "deno lint",
     "format": "deno fmt",
     "format:check": "deno fmt --check",

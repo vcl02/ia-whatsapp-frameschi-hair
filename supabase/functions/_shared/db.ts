@@ -32,6 +32,7 @@ import {
 } from './agendamento.ts';
 import type { PropostaParaLembrete, RepositorioLembretes } from './lembrete.ts';
 import type { PedidoParaExecutar, RepositorioExecucao } from './execucao.ts';
+import type { PedidoPendente, RepositorioFechamento } from './fechamento.ts';
 import type {
   AgendamentoPainel,
   ArmazemTokenPainel,
@@ -649,6 +650,8 @@ export class RepositorioPedidosSupabase implements RepositorioPedidos {
           conversa_id: p.conversaId,
           agendamento_id: p.agendamentoId,
           agendamento_sistema_id: p.agendamentoSistemaId ?? null,
+          agendamento_data: p.agendamentoData ?? null,
+          agendamento_hora: p.agendamentoHora ?? null,
           tipo: p.tipo,
           horario_atual: p.horarioAtual,
           novo_data: p.novoData,
@@ -886,6 +889,15 @@ export class RepositorioExecucaoSupabase implements RepositorioExecucao {
     return r.length > 0;
   }
 
+  async guardarCopia(id: string, copia: Record<string, unknown>): Promise<void> {
+    checar(
+      await this.db.from('salao_pedidos').update({ copia_agendamento: copia }).eq(
+        'id',
+        id,
+      ),
+    );
+  }
+
   async concluir(id: string, resultado: string): Promise<void> {
     checar(
       await this.db
@@ -943,6 +955,51 @@ export class RepositorioExecucaoSupabase implements RepositorioExecucao {
             },
         )
         .eq('id', agendamentoId),
+    );
+  }
+}
+
+/** Pedidos pendentes que a Bruna pode ter resolvido direto no Minha Agenda. */
+export class RepositorioFechamentoSupabase implements RepositorioFechamento {
+  constructor(private db: SupabaseClient) {}
+
+  async pendentes(): Promise<PedidoPendente[]> {
+    const r = checar(
+      await this.db
+        .from('salao_pedidos')
+        .select(
+          'id, tipo, agendamento_sistema_id, agendamento_data, agendamento_hora, novo_data, novo_hora',
+        )
+        .eq('status', 'pendente')
+        .not('agendamento_sistema_id', 'is', null)
+        .not('agendamento_data', 'is', null),
+    ) as Array<{
+      id: string;
+      tipo: string;
+      agendamento_sistema_id: number;
+      agendamento_data: string;
+      agendamento_hora: string | null;
+      novo_data: string | null;
+      novo_hora: string | null;
+    }>;
+    return r.map((x) => ({
+      id: x.id,
+      tipo: x.tipo,
+      agendamentoSistemaId: Number(x.agendamento_sistema_id),
+      data: x.agendamento_data,
+      hora: x.agendamento_hora,
+      novoData: x.novo_data,
+      novoHora: x.novo_hora,
+    }));
+  }
+
+  async fechar(id: string, resultado: string): Promise<void> {
+    checar(
+      await this.db
+        .from('salao_pedidos')
+        .update({ status: 'feito', feito_em: new Date().toISOString(), resultado })
+        .eq('id', id)
+        .eq('status', 'pendente'),
     );
   }
 }

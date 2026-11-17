@@ -7,6 +7,7 @@
 
 import { dataCurta, mensagemConfirmacao } from './agendamento.ts';
 import {
+  copiaDoAgendamento,
   mesmoTelefone,
   type PainelMinhaAgenda,
   telefonesDoAgendamento,
@@ -32,6 +33,8 @@ export interface RepositorioExecucao {
   /** Marca como "executando" só se ninguém pegou antes. */
   reservar(id: string): Promise<boolean>;
   concluir(id: string, resultado: string): Promise<void>;
+  /** Guarda a cópia do agendamento ANTES de mexer nele (para marcar de novo se foi engano). */
+  guardarCopia(id: string, copia: Record<string, unknown>): Promise<void>;
   /** Desfaz a reserva e guarda o motivo da falha (o pedido volta a ficar pendente). */
   liberar(id: string, erro: string): Promise<void>;
   /** Acerta o registro do bot (se o pedido veio de um agendamento feito pela IA). */
@@ -114,6 +117,8 @@ export async function executarPedido(
     if (!mesmoTelefone(p.waId, telefonesDoAgendamento(a))) {
       throw new Error('o agendamento não é do telefone desta conversa');
     }
+    // Sem a cópia guardada, não mexe: se foi engano, é ela que permite marcar de novo.
+    await deps.repo.guardarCopia(p.id, copiaDoAgendamento(a));
     const servico = String((a.service as { name?: string } | null)?.name ?? 'serviço');
     const dataAtual = String(a.date);
     const horaAtual = String(a.startTime).slice(0, 5);

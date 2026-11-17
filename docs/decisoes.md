@@ -365,3 +365,17 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
   no Minha Agenda" continua valendo.
 - Fica de fora (não verificado): se desfazer um cancelamento é possível; o `DELETE` apaga
   o agendamento como o botão de excluir do portal (visto no HAR de 2026-11-16).
+
+## Cópia do agendamento e fechamento automático de pedidos — 2026-11-17
+
+- Antes de cancelar ou remarcar (pela IA ou pelo botão do painel), `executarPedido` guarda
+  em `salao_pedidos.copia_agendamento` uma cópia do agendamento (cliente: nome e
+  telefones; serviço, valor, dia, horário, profissional, comentários, pagamento). Sem CPF,
+  e-mail, endereço ou nascimento. Se a cópia não for gravada, nada é alterado. Dá para
+  marcar de novo igual, mas **não existe botão de desfazer**: a Bruna refaz à mão.
+- Pedido pendente resolvido direto no Minha Agenda fecha sozinho: a `salao-lembrete` (cron
+  a cada minuto) confere, só quando há pedido pendente e usando o cache de 15 min da
+  agenda, se o agendamento sumiu do dia (cancelado), apareceu em outro dia ou hora
+  (remarcado) ou já passou. Resultado "Fechado sozinho: ...". Erro de leitura = não fecha.
+- Limite conhecido: o painel mostra só os 5 pedidos feitos mais recentes (os outros ficam
+  no banco).

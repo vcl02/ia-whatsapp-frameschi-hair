@@ -5,11 +5,19 @@
 
 import { enviarLembretes } from '../_shared/lembrete.ts';
 import {
+  ArmazemTokenPainelSupabase,
+  CacheAgendaSupabase,
   clienteServico,
   exigirEnv,
   LembretesSupabase,
+  RepositorioFechamentoSupabase,
   RepositorioSupabase,
 } from '../_shared/db.ts';
+import { fecharPedidosResolvidos } from '../_shared/fechamento.ts';
+import {
+  lerCredenciaisPainel,
+  PainelMinhaAgenda,
+} from '../_shared/painel_minhaagenda.ts';
 import { type ConfigWhatsApp, enviarTexto } from '../_shared/whatsapp.ts';
 import { EVENTO_DE_ERRO, registrarEvento } from '../_shared/eventos.ts';
 import { AlertasSupabase, enviarAlertaDeErros } from '../_shared/alertas.ts';
@@ -51,6 +59,27 @@ async function tratarInterno(req: Request): Promise<Response> {
     log: logar,
   });
   await Promise.all(gravacoes);
+
+  // Pedidos que a Bruna resolveu direto no Minha Agenda fecham sozinhos. Nunca atrapalha
+  // os lembretes.
+  try {
+    const cred = lerCredenciaisPainel((n) => Deno.env.get(n));
+    if (cred) {
+      const painel = new PainelMinhaAgenda(
+        cred,
+        new ArmazemTokenPainelSupabase(db),
+        new CacheAgendaSupabase(db),
+      );
+      await fecharPedidosResolvidos({
+        repo: new RepositorioFechamentoSupabase(db),
+        agendaDoDia: (data) => painel.agendaDoDia(data),
+        log: logar,
+      });
+      await Promise.all(gravacoes);
+    }
+  } catch (e) {
+    log('erro_fechar_pedidos', { erro: String(e) });
+  }
 
   // O alerta nunca pode atrapalhar os lembretes.
   try {

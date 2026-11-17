@@ -308,6 +308,9 @@ export interface NovoPedido {
   agendamentoId: string | null;
   /** Id do agendamento no Minha Agenda (painel). Com ele a Bruna executa com um clique. */
   agendamentoSistemaId?: number | null;
+  /** Dia e hora do agendamento no sistema (para fechar o pedido sozinho depois). */
+  agendamentoData?: string | null;
+  agendamentoHora?: string | null;
   tipo: 'cancelar' | 'remarcar' | 'indefinido';
   horarioAtual: string | null;
   novoData: string | null;
@@ -692,6 +695,8 @@ export function montarFerramentas(
         conversaId: ctx.conversaId,
         agendamentoId: atual?.id ?? null,
         agendamentoSistemaId: doSistema?.id ?? null,
+        agendamentoData: doSistema?.data ?? null,
+        agendamentoHora: doSistema?.inicio ?? null,
         tipo,
         horarioAtual: doSistema
           ? `${doSistema.servico}, ${

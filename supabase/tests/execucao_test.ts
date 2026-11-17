@@ -48,7 +48,14 @@ function pedido(p: Partial<PedidoParaExecutar> = {}): PedidoParaExecutar {
 function montar(p: PedidoParaExecutar | null, dia: AgendamentoPainel[] = []) {
   const feito: string[] = [];
   const enviados: string[] = [];
-  const estado = { reservado: false, concluido: '', liberado: '' };
+  const estado = {
+    reservado: false,
+    concluido: '',
+    liberado: '',
+    copia: null as Record<string, unknown> | null,
+    ordem: [] as string[],
+    falharCopia: false,
+  };
   const deps: DepsExecucao = {
     repo: {
       carregar: () => Promise.resolve(p),
@@ -57,13 +64,21 @@ function montar(p: PedidoParaExecutar | null, dia: AgendamentoPainel[] = []) {
         estado.reservado = true;
         return Promise.resolve(true);
       },
+      guardarCopia: (_id, c) => {
+        if (estado.falharCopia) return Promise.reject(new Error('banco fora'));
+        estado.copia = c;
+        estado.ordem.push('copia');
+        return Promise.resolve();
+      },
       concluir: (_id, r) => ((estado.concluido = r), Promise.resolve()),
       liberar: (_id, e) => ((estado.liberado = e), Promise.resolve()),
       acertarAgendamentoBot: () => Promise.resolve(),
     },
     painel: {
       agendamento: () => Promise.resolve({ ...AG }),
-      cancelar: (id) => (feito.push(`cancelar ${id}`), Promise.resolve()),
+      cancelar: (id) => (
+        feito.push(`cancelar ${id}`), estado.ordem.push('cancelar'), Promise.resolve()
+      ),
       remarcar: (_a, n) => (
         feito.push(`remarcar ${n.data} ${n.hora} ${n.profissionalId}`), Promise.resolve()
       ),
@@ -198,4 +213,26 @@ Deno.test('origem painel: texto da Bruna, sem a frase do sinal e sem marca de IA
   assertEquals(t.enviados[0].includes('sinal'), false);
   assertEquals(t.estado.concluido.startsWith('Feito pela IA'), false);
   assert(r.ok);
+});
+
+Deno.test('cópia do agendamento é guardada ANTES de cancelar, sem CPF nem e-mail', async () => {
+  const t = montar(pedido());
+  const r = await executarPedido(t.deps, 'pd1');
+  assert(r.ok);
+  assertEquals(t.estado.ordem, ['copia', 'cancelar']);
+  const c = t.estado.copia as Record<string, unknown>;
+  assertEquals(c.inicio, '13:00');
+  assertEquals((c.servico as { nome: string }).nome, 'Progressiva');
+  assertEquals((c.cliente as { telefones: string[] }).telefones, ['11999998888']);
+  assertEquals(JSON.stringify(c).includes('cpf'), false);
+  assertEquals(JSON.stringify(c).includes('email'), false);
+});
+
+Deno.test('sem conseguir guardar a cópia: não cancela e libera o pedido', async () => {
+  const t = montar(pedido());
+  t.estado.falharCopia = true;
+  const r = await executarPedido(t.deps, 'pd1');
+  assertEquals(r.ok, false);
+  assertEquals(t.feito, []);
+  assertStringIncludes(t.estado.liberado, 'banco fora');
 });
