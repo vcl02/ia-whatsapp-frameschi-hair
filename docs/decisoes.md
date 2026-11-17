@@ -410,3 +410,17 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
 - O registro do bot cancelado pela IA agora diz "cancelado pela IA a pedido da cliente".
 - Texto de política de cancelamento no Minha Agenda: "Cancelamentos em no máximo 24 horas
   antes" (ambíguo; a IA repete como está). A trava de 24 h da IA assume "pelo menos 24 h".
+
+## Cliente que quer a Lia e não a Bruna — 2026-11-17
+
+- No teste, a IA passou a conversa para a Bruna 3 vezes seguidas mesmo com o Victor
+  dizendo que queria a Lia (pausas com motivo escrito pela própria IA; o histórico tinha
+  vários pedidos antigos de "falar com a Bruna" dos testes). Correções:
+  - prompt: chamar a Bruna só pelo pedido da mensagem ATUAL ou quando não resolver;
+    pedidos antigos do histórico não valem; se a cliente prefere a Lia ou recusa a Bruna,
+    continuar atendendo e não dizer que avisou a Bruna;
+  - `pedeHumano` (atalho sem IA): "sem a Bruna", "não com a Bruna", "não precisa chamar a
+    Bruna" saem do texto antes de procurar o pedido; antes, "quero falar com a Lia e não
+    com a Bruna" contava como pedido de humano.
+- Limite: é regra de prompt, então a IA ainda pode errar em casos ambíguos. Conversa
+  pausada continua pausada até a Bruna ou o Victor clicarem em "Retomar IA".

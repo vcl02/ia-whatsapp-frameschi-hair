@@ -664,3 +664,17 @@ Deno.test('servicosParaIA: só tira o que tem "masculino/a" no nome', () => {
     'Hidratação feminina',
   ]);
 });
+
+Deno.test('pedeHumano: recusar a Bruna não é pedir a Bruna', () => {
+  // quem recusa a pessoa quer a assistente
+  assertEquals(pedeHumano('quero falar com a lia e não com a bruna'), false);
+  assertEquals(pedeHumano('Lia quero que você me ajuda, sem Bruna'), false);
+  assertEquals(pedeHumano('não quero falar com a Bruna, quero você'), false);
+  assertEquals(pedeHumano('não precisa chamar a bruna não'), false);
+  assertEquals(pedeHumano('sem atendente por favor'), false);
+  // pedidos de verdade continuam valendo
+  assertEquals(pedeHumano('quero falar com a Bruna'), true);
+  assertEquals(pedeHumano('não quero falar com a lia, quero a Bruna'), true);
+  assertEquals(pedeHumano('atendente'), true);
+  assertEquals(pedeHumano('prefiro falar com uma pessoa'), true);
+});

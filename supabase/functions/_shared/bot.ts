@@ -138,9 +138,27 @@ const ENFEITE = new Set([
   'urgente',
 ]);
 
+// "sem a Bruna", "não com a Bruna", "não quero falar com uma pessoa": a cliente está
+// RECUSANDO a pessoa, então esse trecho sai do texto antes de procurar o pedido.
+const TERMO_HUMANO = String
+  .raw`(?:a |o |uma |um )?(?:bruna|dona|atendente|atendentes|pessoa|humano|humana|responsavel|alguem)`;
+const NEGACAO_HUMANO = new RegExp(
+  [
+    String.raw`\b(?:sem|nem)\s+${TERMO_HUMANO}\b`,
+    String
+      .raw`\bnao\s+(?:com|precisa|quero|preciso|e pra|e para)\b.{0,22}?\b${TERMO_HUMANO}\b`,
+    String.raw`\bnao\s+${TERMO_HUMANO}\b`,
+  ].join('|'),
+  'g',
+);
+
 /** A cliente quer falar com uma pessoa (Bruna), não com a assistente. */
 export function pedeHumano(texto: string): boolean {
-  const limpo = texto.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  const limpo = texto
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(NEGACAO_HUMANO, ' ');
   if (PEDIDO_HUMANO.test(limpo)) return true;
   const palavras = limpo.replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
   return palavras.length > 0 && palavras.length <= 4 &&

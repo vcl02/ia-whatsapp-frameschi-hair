@@ -32,6 +32,8 @@ Deno.test('prompt contém só os dados configurados', () => {
   assertStringIncludes(s, 'POR QUE está chamando a Bruna');
   assertStringIncludes(s, 'o sinal de 20% não é devolvido');
   assertStringIncludes(s, 'atende apenas mulheres');
+  assertStringIncludes(s, 'Pedidos antigos de falar com a Bruna');
+  assertStringIncludes(s, 'não diga que avisou a Bruna');
   assertStringIncludes(s, 'Nunca presuma o gênero pelo nome');
   assertStringIncludes(s, 'VOCÊ faz, mas só depois de a cliente confirmar');
 });
