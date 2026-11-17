@@ -50,17 +50,19 @@ export function lerConfigAviso(
 }
 
 /**
- * Todas as contas de e-mail que recebem os avisos: a principal (SALAO_AVISO_EMAIL_PARA,
- * SALAO_AVISO_EMAIL_DE, SALAO_RESEND_API_KEY) e, se completa, a da Bruna (mesmos nomes
- * com o sufixo _BRUNA, com a chave do Resend dela).
+ * Contas de e-mail que recebem os avisos: a principal (SALAO_AVISO_EMAIL_PARA,
+ * SALAO_AVISO_EMAIL_DE, SALAO_RESEND_API_KEY) e a da Bruna (os mesmos nomes com o sufixo
+ * _BRUNA, com a chave do Resend dela). Só entram as completas, então dá para usar só uma
+ * delas. Se nenhuma estiver completa, devolve a principal (o aviso vira só uma linha de log).
  */
 export function lerConfigsAviso(
   env: (n: string) => string | undefined,
 ): ConfigAviso[] {
-  const bruna = lerConfigAviso((n) => env(`${n}_BRUNA`));
-  return bruna.apiKey && bruna.de && bruna.para.length > 0
-    ? [lerConfigAviso(env), bruna]
-    : [lerConfigAviso(env)];
+  const principal = lerConfigAviso(env);
+  const completas = [principal, lerConfigAviso((n) => env(`${n}_BRUNA`))].filter(
+    (c) => c.apiKey && c.de && c.para.length > 0,
+  );
+  return completas.length > 0 ? completas : [principal];
 }
 
 /** Números que recebem o aviso pelo WhatsApp (SALAO_AVISO_WHATSAPP_PARA, separados por vírgula). */

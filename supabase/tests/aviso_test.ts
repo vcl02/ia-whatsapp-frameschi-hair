@@ -98,6 +98,18 @@ Deno.test('config: a conta da Bruna só entra se estiver completa', () => {
   ]]);
 });
 
+Deno.test('config: só a conta da Bruna, sem a principal', () => {
+  const env: Record<string, string> = {
+    SALAO_AVISO_EMAIL_PARA_BRUNA: 'bruna@x.com',
+    SALAO_AVISO_EMAIL_DE_BRUNA: 'onboarding@resend.dev',
+    SALAO_RESEND_API_KEY_BRUNA: 'k2',
+  };
+  const c = lerConfigsAviso((n) => env[n]);
+  assertEquals(c.map((x) => [x.para, x.apiKey]), [[['bruna@x.com'], 'k2']]);
+  // nenhuma completa: devolve a principal vazia (só vira uma linha de log)
+  assertEquals(lerConfigsAviso(() => undefined).length, 1);
+});
+
 Deno.test('cada conta recebe com a sua chave; uma falhar não impede a outra', async () => {
   const usadas: string[] = [];
   const logs: string[] = [];

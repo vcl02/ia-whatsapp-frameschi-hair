@@ -340,3 +340,7 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
 - Falha de e-mail (por exemplo 403) e de WhatsApp agora viram `erro_aviso_email` /
   `erro_aviso_whatsapp` e aparecem no painel de erros. Os status de entrega desse aviso
   não são gravados (o número da Bruna não está na lista de teste).
+- 2026-11-17: o e-mail do Victor saiu dos avisos: ficou só a conta da Bruna (`*_BRUNA`).
+  `lerConfigsAviso` só usa contas completas. Resumo de erros e da sincronização, que usam
+  só a conta principal, passam a ser apenas registrados no log (os erros continuam no
+  painel).
