@@ -8,7 +8,9 @@ import {
   DEF_PROPOR,
   type DepsComprovante,
   type DepsFerramentas,
+  diaPorExtenso,
   garantirPedido,
+  mensagemConfirmacao,
   montarFerramentas,
   type NovoPedido,
   type PedidoAgendamento,
@@ -366,7 +368,15 @@ Deno.test('comprovante com proposta pendente: agenda, avisa a equipe e responde'
   await c.ferramentas().executar('propor_agendamento', PROPOSTA);
   const r = await c.comprovante('image');
   assertEquals(r?.acao, 'responder');
-  assertStringIncludes((r as { texto: string }).texto, 'terça-feira, 10/11');
+  assertStringIncludes(
+    (r as { texto: string }).texto,
+    'dia (Terça) 10 de Novembro às 09:00',
+  );
+  assertStringIncludes((r as { texto: string }).texto, 'Profissional: Bruna');
+  assertStringIncludes(
+    (r as { texto: string }).texto,
+    '📍Localização: https://bit.ly/3POPzSC',
+  );
   assertEquals(c.agendados[0], {
     nome: 'Isa',
     telefone: '11992090474',
@@ -808,4 +818,30 @@ Deno.test('pedido com agendamento da agenda real: só aceita id desta cliente e 
   );
   assertEquals(c.pedidos.itens[0].agendamentoSistemaId, 555);
   assertStringIncludes(c.pedidos.itens[0].horarioAtual!, 'Banho de Lua');
+});
+
+Deno.test('mensagem de confirmação no modelo da Bruna', () => {
+  assertEquals(
+    mensagemConfirmacao({
+      nome: 'Victor Lopes',
+      data: '2026-11-18',
+      hora: '13:00',
+      servico: 'Progressiva sem Formol (A partir de)',
+      preco: 257.5,
+      profissional: 'Bruna',
+    }),
+    [
+      'Oi Victor, tudo bem?',
+      'Este é um lembrete do seu atendimento, dia (Quarta) 18 de Novembro às 13:00.',
+      'Serviço: Progressiva sem Formol (A partir de)',
+      'R$ 257,50',
+      'Profissional: Bruna',
+      'Em caso de desistência avisar com antecedência.',
+      'Tolerância de atraso 10 minutos, após isso não poderei atender, agradeço a compreensão 🤗',
+      'Obrigado.❤️',
+      '',
+      '📍Localização: https://bit.ly/3POPzSC',
+    ].join('\n'),
+  );
+  assertEquals(diaPorExtenso('2026-11-21'), '(Sábado) 21 de Novembro');
 });

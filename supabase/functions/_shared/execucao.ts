@@ -3,7 +3,7 @@
 // Antes de mexer na agenda, confere de novo: o agendamento é da cliente do pedido e, na
 // remarcação, o novo horário está livre com a profissional. Qualquer dúvida = não faz nada.
 
-import { dataCurta } from './agendamento.ts';
+import { dataCurta, mensagemConfirmacao } from './agendamento.ts';
 import {
   mesmoTelefone,
   type PainelMinhaAgenda,
@@ -147,9 +147,16 @@ export async function executarPedido(
       resultado = `Remarcado no Minha Agenda: ${servico}, de ${
         dataCurta(dataAtual)
       } às ${horaAtual} para ${dataCurta(p.novoData)} às ${p.novoHora} com ${prof.nome}.`;
-      texto = `Prontinho! Seu horário de ${servico} foi remarcado para ${
-        dataCurta(p.novoData)
-      }, às ${p.novoHora}, com a ${prof.nome}. 💖`;
+      texto = `Prontinho, seu horário foi remarcado! 💖\n\n${
+        mensagemConfirmacao({
+          nome: String((a.customer as { name?: string } | null)?.name ?? ''),
+          data: p.novoData,
+          hora: p.novoHora,
+          servico,
+          preco: typeof a.price === 'number' ? a.price : null,
+          profissional: prof.nome,
+        })
+      }`;
     }
 
     // Avisa a cliente se ainda estiver na janela de 24 h do WhatsApp.

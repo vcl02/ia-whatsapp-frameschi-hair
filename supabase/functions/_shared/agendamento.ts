@@ -26,7 +26,7 @@ import {
   type PainelMinhaAgenda,
   proximasDatas,
 } from './painel_minhaagenda.ts';
-import type { Servico } from './salao.ts';
+import { LINK_LOCALIZACAO, type Servico } from './salao.ts';
 
 // ---------- ferramentas que o modelo vê ----------
 
@@ -201,6 +201,46 @@ export function dataCurta(data: string): string {
     month: '2-digit',
   }).format(d);
   return `${dia}, ${dm}`;
+}
+
+const maiuscula = (t: string) => t ? t[0].toUpperCase() + t.slice(1) : t;
+
+/** "2026-11-18" -> "(Quarta) 18 de Novembro" */
+export function diaPorExtenso(data: string): string {
+  const d = new Date(`${data}T12:00:00Z`);
+  const fmt = (o: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC', ...o }).format(d);
+  const semana = maiuscula(fmt({ weekday: 'long' }).split('-')[0]);
+  return `(${semana}) ${Number(fmt({ day: 'numeric' }))} de ${
+    maiuscula(fmt({ month: 'long' }))
+  }`;
+}
+
+/**
+ * Mensagem que a cliente recebe quando o horário fica marcado (ou remarcado), no modelo
+ * que a Bruna usa (passado pelo Victor em 2026-11-17).
+ */
+export function mensagemConfirmacao(p: {
+  nome: string;
+  data: string;
+  hora: string;
+  servico: string;
+  preco: number | null;
+  profissional: string;
+}): string {
+  const nome = p.nome.trim().split(/\s+/)[0] || '';
+  return [
+    `Oi${nome ? ` ${nome}` : ''}, tudo bem?`,
+    `Este é um lembrete do seu atendimento, dia ${diaPorExtenso(p.data)} às ${p.hora}.`,
+    `Serviço: ${p.servico}`,
+    ...(p.preco ? [reais(p.preco)] : []),
+    `Profissional: ${p.profissional}`,
+    'Em caso de desistência avisar com antecedência.',
+    'Tolerância de atraso 10 minutos, após isso não poderei atender, agradeço a compreensão 🤗',
+    'Obrigado.❤️',
+    '',
+    `📍Localização: ${LINK_LOCALIZACAO}`,
+  ].join('\n');
 }
 
 /** wa_id brasileiro (5511999998888) -> telefone nacional (11999998888). Outros países: null. */
@@ -814,10 +854,14 @@ export async function receberComprovante(
   }
   return {
     acao: 'responder',
-    texto:
-      `Recebi seu comprovante, ${proposta.nomeCliente}! 💖 Seu horário de ${servico} está agendado para ${
-        dataCurta(proposta.data)
-      }, às ${proposta.hora}, com a ${proposta.profissionalNome}. A Bruna confere o Pix e, se precisar de algo, chama você por aqui.`,
+    texto: mensagemConfirmacao({
+      nome: proposta.nomeCliente,
+      data: proposta.data,
+      hora: proposta.hora,
+      servico: proposta.servicoNome,
+      preco: valorDoPreco(proposta.preco),
+      profissional: proposta.profissionalNome,
+    }),
   };
 }
 

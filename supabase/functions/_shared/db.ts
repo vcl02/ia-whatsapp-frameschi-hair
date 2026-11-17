@@ -191,18 +191,7 @@ export class RepositorioSupabase implements Repositorio {
     const { data, error } = await this.db
       .from('salao_numeros')
       .select('wa_id, lista');
-    if (error) {
-      // Migration ainda não aplicada: mantém o comportamento anterior (secret), sem derrubar o webhook.
-      const code = (error as { code?: string }).code;
-      if (code === '42P01' || code === 'PGRST205') {
-        const antigos = (Deno.env.get('SALAO_SO_RESPONDER_PARA') ?? '')
-          .split(',')
-          .map((s) => s.replace(/\D/g, ''))
-          .filter(Boolean);
-        return { teste: new Set(antigos), familiar: new Set() };
-      }
-      throw error;
-    }
+    if (error) throw error; // sem as listas, nada é respondido
     const r = data as { wa_id: string; lista: string }[];
     return {
       teste: new Set(r.filter((x) => x.lista === 'teste').map((x) => x.wa_id)),

@@ -56,6 +56,9 @@ export const SALAO: DadosSalao = {
   ],
 };
 
+/** Link da localização do salão, usado na confirmação do agendamento (informado em 2026-11-17). */
+export const LINK_LOCALIZACAO = 'https://bit.ly/3POPzSC';
+
 /** Aplica o que veio do Minha Agenda (tabela salao_info) sobre os dados fixos. */
 export function comInfoEspelhada(
   d: DadosSalao,
