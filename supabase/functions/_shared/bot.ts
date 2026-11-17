@@ -7,6 +7,7 @@ import {
   comInfoEspelhada,
   type DadosSalao,
   type Servico,
+  servicosParaIA,
 } from './salao.ts';
 import type { Aprendizado, Atendente, ConfigIA, ItemHistorico } from './llm.ts';
 import type {
@@ -292,7 +293,7 @@ export async function processarMensagem(
       'Por aqui eu só consigo ler texto, então não consigo ver o que você mandou.',
     );
   }
-  const servicos = await deps.repo.servicosAtivos();
+  const servicos = servicosParaIA(await deps.repo.servicosAtivos());
   const salao = comInfoEspelhada(deps.salao, await deps.repo.infoSalao());
   const faltando = camposFaltando(salao, servicos);
   if (faltando.length > 0) {

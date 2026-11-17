@@ -59,6 +59,17 @@ export const SALAO: DadosSalao = {
 /** Link da localização do salão, usado na confirmação do agendamento (informado em 2026-11-17). */
 export const LINK_LOCALIZACAO = 'https://bit.ly/3POPzSC';
 
+/**
+ * Serviços que a IA não vê (nem oferece, nem agenda): os "masculinos", porque o salão atende
+ * só mulheres (decisão de 2026-11-17, "por agora"). Só esconde da IA: o espelho do Minha
+ * Agenda e o painel continuam com eles.
+ */
+const SERVICO_ESCONDIDO = /\bmasculin[oa]s?\b/i;
+
+export function servicosParaIA(servicos: Servico[]): Servico[] {
+  return servicos.filter((s) => !SERVICO_ESCONDIDO.test(s.nome));
+}
+
 /** Aplica o que veio do Minha Agenda (tabela salao_info) sobre os dados fixos. */
 export function comInfoEspelhada(
   d: DadosSalao,

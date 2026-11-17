@@ -384,5 +384,8 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
 
 - Diretriz do Victor/Bruna: o salão atende só mulheres. A IA recusa com educação quando a
   pessoa diz que é homem ou pede um serviço para um homem; não adivinha o gênero por nome
-  ou foto. É regra de prompt (não há trava no código). Conflito conhecido: o Minha Agenda
-  tem serviços "Masculina" (depilação de costas e de peito/barriga) na lista que a IA vê.
+  ou foto. É regra de prompt (não há trava no código para o público).
+- Serviços com "masculino/a" no nome (hoje: depilação de costas e de peito/barriga) ficam
+  escondidos da IA "por agora" (`servicosParaIA` em `salao.ts`, aplicado em `bot.ts`),
+  então ela não os oferece nem agenda. O espelho do Minha Agenda e o painel continuam com
+  eles. Para voltar a mostrar, é só tirar o filtro.

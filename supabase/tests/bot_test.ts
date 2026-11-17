@@ -16,7 +16,12 @@ import type {
   ItemHistorico,
 } from '../functions/_shared/llm.ts';
 import type { MensagemRecebida, ResultadoEnvio } from '../functions/_shared/whatsapp.ts';
-import { type DadosSalao, SALAO, type Servico } from '../functions/_shared/salao.ts';
+import {
+  type DadosSalao,
+  SALAO,
+  type Servico,
+  servicosParaIA,
+} from '../functions/_shared/salao.ts';
 import { SERVICOS_TESTE } from './salao_teste.ts';
 
 class RepoFake implements Repositorio {
@@ -622,4 +627,40 @@ Deno.test('comMensagemAtual: só acrescenta quando a última do histórico não 
     comMensagemAtual([...h, { autor: 'bot', texto: 'olá' }], 'tudo bem?').at(-1),
     { autor: 'cliente', texto: 'tudo bem?' },
   );
+});
+
+Deno.test('serviços masculinos ficam escondidos da IA (o salão atende só mulheres)', async () => {
+  const t = montar(ok);
+  t.repo.servicos = [
+    { origem_id: 1, nome: 'Escova', preco: 'R$ 50' },
+    { origem_id: 2, nome: 'Depilação Costas Masculina (A partir de)', preco: 'R$ 103' },
+    {
+      origem_id: 3,
+      nome: 'Depilação Peito / Barriga Masculina (A partir de)',
+      preco: 'R$ 103',
+    },
+    { origem_id: 4, nome: 'Progressiva sem Formol', preco: 'R$ 250' },
+  ];
+  let vistos: string[] = [];
+  const atendenteOriginal = t.deps.atendente;
+  t.deps.atendente = {
+    responder: (h, servicos, salao, opcoes) => {
+      vistos = servicos.map((s) => s.nome);
+      return atendenteOriginal.responder(h, servicos, salao, opcoes);
+    },
+  };
+  await processarMensagem(t.deps, 'c1', msg());
+  assertEquals(vistos, ['Escova', 'Progressiva sem Formol']);
+});
+
+Deno.test('servicosParaIA: só tira o que tem "masculino/a" no nome', () => {
+  const lista = [
+    { nome: 'Corte Masculino', preco: 'x' },
+    { nome: 'Escova', preco: 'x' },
+    { nome: 'Hidratação feminina', preco: 'x' },
+  ];
+  assertEquals(servicosParaIA(lista).map((s) => s.nome), [
+    'Escova',
+    'Hidratação feminina',
+  ]);
 });
