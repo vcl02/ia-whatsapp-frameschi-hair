@@ -379,3 +379,10 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
   (remarcado) ou já passou. Resultado "Fechado sozinho: ...". Erro de leitura = não fecha.
 - Limite conhecido: o painel mostra só os 5 pedidos feitos mais recentes (os outros ficam
   no banco).
+
+## Público atendido — 2026-11-17
+
+- Diretriz do Victor/Bruna: o salão atende só mulheres. A IA recusa com educação quando a
+  pessoa diz que é homem ou pede um serviço para um homem; não adivinha o gênero por nome
+  ou foto. É regra de prompt (não há trava no código). Conflito conhecido: o Minha Agenda
+  tem serviços "Masculina" (depilação de costas e de peito/barriga) na lista que a IA vê.
