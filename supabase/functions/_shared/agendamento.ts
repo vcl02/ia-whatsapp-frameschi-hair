@@ -20,6 +20,11 @@ import {
   loginAnonimo,
   validarData,
 } from './disponibilidade.ts';
+import {
+  DIAS_AGENDA_CLIENTE,
+  type PainelMinhaAgenda,
+  proximasDatas,
+} from './painel_minhaagenda.ts';
 import type { Servico } from './salao.ts';
 
 // ---------- ferramentas que o modelo vê ----------
@@ -846,6 +851,63 @@ export async function conferirAgendamentoNoSistema(
     );
   }
   return avisos.length ? avisos.join('\n') : null;
+}
+
+/**
+ * Agenda REAL da cliente, lida do painel do Minha Agenda (inclui o que a Bruna marcou,
+ * remarcou ou cancelou direto lá). Também acerta os agendamentos feitos pelo bot: o que
+ * não está mais na agenda vira "cancelado_no_sistema". Lança se o painel falhar (quem
+ * chama cai na conferência antiga).
+ */
+export async function contextoDaAgendaReal(
+  painel: Pick<PainelMinhaAgenda, 'daCliente'>,
+  repo: Pick<RepositorioPropostas, 'agendadoAtivo' | 'mudarStatus'>,
+  conversaId: string,
+  waId: string,
+  agora: Date,
+  log: (evento: string, dados?: Record<string, unknown>) => void,
+): Promise<string> {
+  const hoje = hojeSaoPaulo(agora);
+  const datas = proximasDatas(hoje, DIAS_AGENDA_CLIENTE);
+  const naAgenda = await painel.daCliente(waId, datas);
+
+  // Agendamentos do bot que sumiram da agenda real (dentro da janela consultada).
+  for (let i = 0; i < 3; i++) {
+    const ativo = await repo.agendadoAtivo(conversaId, hoje);
+    if (
+      !ativo || !datas.includes(ativo.data) ||
+      agora.getTime() - ativo.criadoEm < CONFERIR_DEPOIS_MS
+    ) break;
+    const continua = naAgenda.some((a) =>
+      a.data === ativo.data && a.inicio === ativo.hora &&
+      a.profissionalId === ativo.profissionalId
+    );
+    if (continua) break;
+    await repo.mudarStatus(
+      ativo.id,
+      'agendado',
+      'cancelado_no_sistema',
+      'não está mais na agenda do painel do Minha Agenda',
+    );
+    log('agendamento_cancelado_no_sistema', { conversa: conversaId, proposta: ativo.id });
+  }
+
+  const ultimo = datas[datas.length - 1];
+  if (naAgenda.length === 0) {
+    return `Agenda real do salão (consultada agora no sistema): esta cliente NÃO tem nenhum horário marcado de hoje até ${
+      dataCurta(ultimo)
+    }. Não diga que ela tem horário marcado. Se ela disser que tem, pode ser outra data ou outro telefone no cadastro: pergunte o dia e, se não bater, passe para a Bruna.`;
+  }
+  const linhas = naAgenda.map((a) =>
+    `- ${a.servico}, ${dataCurta(a.data)}, às ${a.inicio}, com ${a.profissionalNome}${
+      a.preco ? `, ${reais(a.preco)}` : ''
+    }`
+  );
+  return `Agenda real do salão para esta cliente (consultada agora no sistema, de hoje até ${
+    dataCurta(ultimo)
+  }):\n${
+    linhas.join('\n')
+  }\nIsto é o que vale: se algo dito antes na conversa não bater com esta lista, a equipe mudou no sistema. Se ela pedir para CANCELAR ou REMARCAR um desses horários, siga o roteiro: confirme qual é, pergunte o motivo sem insistir e, para remarcar, o novo dia e horário (consulte com consultar_horarios); com tudo em mãos, chame registrar_pedido_para_bruna com horario_atual preenchido com o horário desta lista. Você não cancela nem remarca.`;
 }
 
 function contextoDaProposta(

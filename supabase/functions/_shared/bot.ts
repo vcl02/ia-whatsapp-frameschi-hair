@@ -64,7 +64,7 @@ export interface DepsBot {
     msg: MensagemRecebida,
   ) => Promise<ResultadoComprovante | null>;
   /** Situação do agendamento da conversa em texto para a IA (ou null). */
-  contextoAgendamento?: (conversaId: string) => Promise<string | null>;
+  contextoAgendamento?: (conversaId: string, waId: string) => Promise<string | null>;
   /**
    * A cliente pediu para cancelar ou remarcar: garante o pedido no painel da Bruna e
    * devolve o resumo dele (ou null se não houver como registrar).
@@ -336,7 +336,7 @@ export async function processarMensagem(
       msg.texto,
     );
     const contextoAgendamento = await deps
-      .contextoAgendamento?.(c.id)
+      .contextoAgendamento?.(c.id, c.waId)
       .catch(() => null);
     // Sem os aprendizados a IA ainda atende; não derruba a resposta por causa deles.
     const aprendizados = await deps.repo.aprendizados(c.id).catch((e) => {

@@ -11,6 +11,8 @@ import {
 } from '../_shared/whatsapp.ts';
 import {
   ArmazemSessaoSupabase,
+  ArmazemTokenPainelSupabase,
+  CacheAgendaSupabase,
   clienteServico,
   exigirEnv,
   RepositorioPedidosSupabase,
@@ -21,6 +23,7 @@ import { ConsultaMinhaAgenda, hojeSaoPaulo } from '../_shared/disponibilidade.ts
 import {
   AgendadorMinhaAgenda,
   conferirAgendamentoNoSistema,
+  contextoDaAgendaReal,
   contextoDoAgendamento,
   garantirPedido,
   montarFerramentas,
@@ -34,6 +37,10 @@ import {
   lerConfigAviso,
 } from '../_shared/aviso.ts';
 import { criarAtendente } from '../_shared/atendente.ts';
+import {
+  lerCredenciaisPainel,
+  PainelMinhaAgenda,
+} from '../_shared/painel_minhaagenda.ts';
 import { SALAO } from '../_shared/salao.ts';
 import { EVENTO_DE_ERRO, registrarEvento } from '../_shared/eventos.ts';
 
@@ -136,6 +143,15 @@ async function tratarInterno(req: Request): Promise<Response> {
       assunto,
       texto,
     );
+  // Painel do Minha Agenda (agenda real da Bruna): só com as 3 credenciais nos secrets.
+  const credPainel = lerCredenciaisPainel((n) => Deno.env.get(n));
+  const painel = credPainel
+    ? new PainelMinhaAgenda(
+      credPainel,
+      new ArmazemTokenPainelSupabase(db),
+      new CacheAgendaSupabase(db),
+    )
+    : null;
   const agendador = agendarLigado ? new AgendadorMinhaAgenda(chaveFirebase!) : undefined;
   const propostas = agendarLigado ? new RepositorioPropostasSupabase(db) : undefined;
   const pedidos = new RepositorioPedidosSupabase(db);
@@ -198,9 +214,25 @@ async function tratarInterno(req: Request): Promise<Response> {
         )
       : undefined,
     contextoAgendamento: propostas
-      ? async (conversaId) => {
-        // Primeiro confere no Minha Agenda se a equipe cancelou ou remarcou por lá.
-        const noSistema = consulta
+      ? async (conversaId, waId) => {
+        // Agenda real (painel com o login da Bruna). Se o painel não estiver configurado
+        // ou falhar, cai na conferência pelos horários livres da página pública.
+        let real: string | null = null;
+        if (painel) {
+          try {
+            real = await contextoDaAgendaReal(
+              painel,
+              propostas,
+              conversaId,
+              waId,
+              new Date(),
+              logar,
+            );
+          } catch (e) {
+            logar('erro_painel_minhaagenda', { erro: String(e) });
+          }
+        }
+        const noSistema = !real && consulta
           ? await conferirAgendamentoNoSistema(
             propostas,
             consulta,
@@ -215,7 +247,7 @@ async function tratarInterno(req: Request): Promise<Response> {
           new Date(),
           (ms) => new Promise((r) => setTimeout(r, ms)),
         );
-        return [noSistema, contexto].filter(Boolean).join('\n') || null;
+        return [real ?? noSistema, contexto].filter(Boolean).join('\n') || null;
       }
       : undefined,
     registrarPedidoCancelamento: (conversaId, motivo) =>

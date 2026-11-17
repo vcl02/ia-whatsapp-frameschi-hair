@@ -46,12 +46,13 @@ Meta, ou apagar as funções `salao-*`. Para remover tudo do hub:
 ## Arquivos de cada função (deploy pelo MCP, tudo inline)
 
 - `salao-webhook`: index, handler e, em `_shared`: assinatura, whatsapp, deps, db, llm,
-  disponibilidade, agendamento, bot, salao, aviso, lembrete, eventos.
+  disponibilidade, agendamento, painel_minhaagenda, bot, salao, aviso, atendente,
+  llm_claude, eventos.
 - `salao-lembrete`: index, handler e, em `_shared`: deps, whatsapp, db, salao, bot, llm,
-  disponibilidade, agendamento, lembrete, eventos, alertas, aviso.
+  disponibilidade, agendamento, painel_minhaagenda, lembrete, eventos, alertas, aviso.
 - `salao-sincronizar`: index, handler e, em `_shared`: deps, db, llm, aviso, minhaagenda,
-  agendamento, disponibilidade, salao, bot, whatsapp, lembrete (o `db.ts` importa
-  `agendamento.ts`, que importa `disponibilidade.ts`).
+  agendamento, painel_minhaagenda, disponibilidade (o `db.ts` importa `agendamento.ts`,
+  que importa `disponibilidade.ts` e `painel_minhaagenda.ts`).
 - Cuidado com o espaço especial (U+00A0) na regex de `minhaagenda.ts`: se virar espaço
   comum, a sincronização acha que todos os preços mudaram.
 - Depois de cada deploy, comparar os arquivos publicados com os do repositório.

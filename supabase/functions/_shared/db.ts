@@ -31,6 +31,12 @@ import {
   resumoDoPedido,
 } from './agendamento.ts';
 import type { PropostaParaLembrete, RepositorioLembretes } from './lembrete.ts';
+import type {
+  AgendamentoPainel,
+  ArmazemTokenPainel,
+  CacheAgenda,
+  TokenPainel,
+} from './painel_minhaagenda.ts';
 
 export function clienteServico(): SupabaseClient {
   return createClient(
@@ -766,5 +772,65 @@ export class LembretesSupabase implements RepositorioLembretes {
         .select('id'),
     ) as unknown[];
     return r.length > 0;
+  }
+}
+
+/** Token do painel do Minha Agenda (login da Bruna), reaproveitado até vencer. */
+export class ArmazemTokenPainelSupabase implements ArmazemTokenPainel {
+  constructor(private db: SupabaseClient) {}
+
+  async ler(): Promise<TokenPainel | null> {
+    const r = checar(
+      await this.db
+        .from('salao_token_painel')
+        .select('token, expira_em')
+        .eq('id', 1)
+        .maybeSingle(),
+    ) as { token: string; expira_em: string } | null;
+    return r ? { token: r.token, expiraEm: new Date(r.expira_em).getTime() } : null;
+  }
+
+  async gravar(t: TokenPainel | null): Promise<void> {
+    if (!t) {
+      checar(await this.db.from('salao_token_painel').delete().eq('id', 1));
+      return;
+    }
+    checar(
+      await this.db.from('salao_token_painel').upsert({
+        id: 1,
+        token: t.token,
+        expira_em: new Date(t.expiraEm).toISOString(),
+        atualizado_em: new Date().toISOString(),
+      }),
+    );
+  }
+}
+
+/** Agenda de cada dia lida do painel, guardada por alguns minutos. */
+export class CacheAgendaSupabase implements CacheAgenda {
+  constructor(private db: SupabaseClient, private agora: () => number = Date.now) {}
+
+  async ler(data: string, maxIdadeMs: number): Promise<AgendamentoPainel[] | null> {
+    const r = checar(
+      await this.db
+        .from('salao_agenda_cache')
+        .select('itens, atualizado_em')
+        .eq('data', data)
+        .maybeSingle(),
+    ) as { itens: AgendamentoPainel[]; atualizado_em: string } | null;
+    if (!r) return null;
+    return this.agora() - new Date(r.atualizado_em).getTime() < maxIdadeMs
+      ? r.itens
+      : null;
+  }
+
+  async gravar(data: string, itens: AgendamentoPainel[]): Promise<void> {
+    checar(
+      await this.db.from('salao_agenda_cache').upsert({
+        data,
+        itens,
+        atualizado_em: new Date(this.agora()).toISOString(),
+      }),
+    );
   }
 }

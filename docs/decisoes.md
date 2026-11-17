@@ -287,11 +287,27 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
   responder, o bot confere se o horário do agendamento ativo voltou a aparecer livre com a
   mesma profissional (`conferirAgendamentoNoSistema`, só leitura, a partir de 10 min
   depois da proposta). Livre = não é mais da cliente: status `cancelado_no_sistema` e a IA
-  é avisada. Ocupado não prova que ainda é dela (outra pessoa pode ter pego o horário), mas
-  é o melhor sinal sem acesso à agenda interna. Remarcação feita lá não é descoberta: só
-  que o horário antigo saiu.
+  é avisada. Ocupado não prova que ainda é dela (outra pessoa pode ter pego o horário),
+  mas é o melhor sinal sem acesso à agenda interna. Remarcação feita lá não é descoberta:
+  só que o horário antigo saiu.
 - Quem pausou/retomou a IA fica em `salao_pausas` (trigger em `salao_conversas`): e-mail
   de quem mexeu no painel ou "sistema".
 - Mensagem que chegou com a IA pausada num número de teste fica fora do contexto; se a IA
   for retomada antes de ela ser respondida, o bot responde a ela mesmo assim
   (`comMensagemAtual`), em vez de falhar com "histórico sem mensagem da cliente".
+
+## Agenda real pelo painel do Minha Agenda — 2026-11-17
+
+- O dono do Minha Agenda autorizou o uso do painel com o login da Bruna, pedindo para não
+  abusar. O login (`/oauth/token`, com usuário, senha e o cabeçalho Basic do portal) gera
+  um token de ~30 dias, guardado em `salao_token_painel` e reaproveitado.
+- Fase 1 (só leitura): antes de responder, a IA recebe os horários da cliente (pelo
+  telefone) de hoje até 15 dias à frente, lidos de
+  `appointments/groupedByEmployeesOrRooms`. Cada dia fica 15 min em `salao_agenda_cache`
+  (só id, data, hora, profissional, serviço, preço, nome e telefones; nada de CPF, e-mail
+  ou endereço), apagado quando o dia passa. Pior caso: 16 leituras a cada 15 min.
+- Agendamento do bot que não está mais na agenda real vira `cancelado_no_sistema`. Se o
+  painel falhar ou não estiver configurado, vale a conferência antiga (horário livre de
+  novo na página pública).
+- Fase 2 (a fazer): cancelar/remarcar pelo painel (`PUT`/`DELETE /appointments/{id}`) com
+  aprovação da Bruna no painel do salão.
