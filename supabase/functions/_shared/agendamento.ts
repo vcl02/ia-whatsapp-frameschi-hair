@@ -228,10 +228,16 @@ export function mensagemConfirmacao(p: {
   servico: string;
   preco: number | null;
   profissional: string;
+  /**
+   * Primeira linha, no lugar da saudação "Oi, tudo bem?". Dentro de uma conversa a cliente
+   * já foi cumprimentada, então quem chama passa uma abertura natural (ex.: "Recebi seu
+   * comprovante!"). Sem ela, usa a saudação do modelo da Bruna.
+   */
+  abertura?: string;
 }): string {
   const nome = p.nome.trim().split(/\s+/)[0] || '';
   return [
-    `Oi${nome ? ` ${nome}` : ''}, tudo bem?`,
+    p.abertura ?? `Oi${nome ? ` ${nome}` : ''}, tudo bem?`,
     `Este é um lembrete do seu atendimento, dia ${diaPorExtenso(p.data)} às ${p.hora}.`,
     `Serviço: ${p.servico}`,
     ...(p.preco ? [reais(p.preco)] : []),
@@ -945,6 +951,11 @@ export async function receberComprovante(
       servico: proposta.servicoNome,
       preco: valorDoPreco(proposta.preco),
       profissional: proposta.profissionalNome,
+      abertura: `Recebi seu comprovante${
+        proposta.nomeCliente.trim()
+          ? `, ${proposta.nomeCliente.trim().split(/\s+/)[0]}`
+          : ''
+      }! 💖 Seu horário está agendado.`,
     }),
   };
 }

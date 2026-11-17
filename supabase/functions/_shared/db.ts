@@ -934,6 +934,7 @@ export class RepositorioExecucaoSupabase implements RepositorioExecucao {
     novo:
       | { data: string; hora: string; profissionalId: number; profissionalNome: string }
       | null,
+    porIA = false,
   ): Promise<void> {
     checar(
       await this.db
@@ -950,7 +951,9 @@ export class RepositorioExecucaoSupabase implements RepositorioExecucao {
             }
             : {
               status: 'cancelado_no_sistema',
-              detalhe: 'cancelado pela Bruna pelo painel do salão',
+              detalhe: porIA
+                ? 'cancelado pela IA a pedido da cliente'
+                : 'cancelado pela Bruna pelo painel do salão',
               atualizado_em: new Date().toISOString(),
             },
         )

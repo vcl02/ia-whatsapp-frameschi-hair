@@ -43,6 +43,8 @@ export interface RepositorioExecucao {
     novo:
       | { data: string; hora: string; profissionalId: number; profissionalNome: string }
       | null,
+    /** Foi a IA (e não a Bruna pelo painel) que alterou. */
+    porIA?: boolean,
   ): Promise<void>;
 }
 
@@ -128,7 +130,9 @@ export async function executarPedido(
     if (p.tipo === 'cancelar') {
       await deps.painel.cancelar(p.agendamentoSistemaId, dataAtual);
       feitoNoSistema = true;
-      if (p.agendamentoId) await deps.repo.acertarAgendamentoBot(p.agendamentoId, null);
+      if (p.agendamentoId) {
+        await deps.repo.acertarAgendamentoBot(p.agendamentoId, null, porIA);
+      }
       resultado = `Cancelado no Minha Agenda: ${servico}, ${
         dataCurta(dataAtual)
       }, às ${horaAtual}.`;
@@ -170,13 +174,14 @@ export async function executarPedido(
           hora: p.novoHora,
           profissionalId: prof.id,
           profissionalNome: prof.nome,
-        });
+        }, porIA);
       }
       resultado = `Remarcado no Minha Agenda: ${servico}, de ${
         dataCurta(dataAtual)
       } às ${horaAtual} para ${dataCurta(p.novoData)} às ${p.novoHora} com ${prof.nome}.`;
-      texto = `Prontinho, seu horário foi remarcado! 💖\n\n${
+      texto = `${
         mensagemConfirmacao({
+          abertura: 'Prontinho, seu horário foi remarcado! 💖',
           nome: String((a.customer as { name?: string } | null)?.name ?? ''),
           data: p.novoData,
           hora: p.novoHora,

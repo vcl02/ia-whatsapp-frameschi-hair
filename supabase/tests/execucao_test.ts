@@ -130,6 +130,7 @@ Deno.test('remarcar: confere o novo horário e faz o PUT com a profissional cert
   assert(r.ok, r.mensagem);
   assertEquals(t.feito, ['remarcar 2026-11-20 10:00 486643']);
   assertStringIncludes(t.enviados[0], 'remarcado');
+  assertEquals(t.enviados[0].includes('tudo bem?'), false); // sem saudação repetida
 });
 
 Deno.test('remarcar para horário ocupado: não mexe na agenda', async () => {

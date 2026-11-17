@@ -377,6 +377,9 @@ Deno.test('comprovante com proposta pendente: agenda, avisa a equipe e responde'
     'dia (Terça) 10 de Novembro às 09:00',
   );
   assertStringIncludes((r as { texto: string }).texto, 'Profissional: Bruna');
+  // a cliente já foi cumprimentada na conversa: sem "Oi, tudo bem?" de novo
+  assertStringIncludes((r as { texto: string }).texto, 'Recebi seu comprovante');
+  assertEquals((r as { texto: string }).texto.includes('tudo bem?'), false);
   assertStringIncludes(
     (r as { texto: string }).texto,
     '📍Localização: https://bit.ly/3POPzSC',
@@ -848,6 +851,18 @@ Deno.test('mensagem de confirmação no modelo da Bruna', () => {
     ].join('\n'),
   );
   assertEquals(diaPorExtenso('2026-11-21'), '(Sábado) 21 de Novembro');
+  // dentro de uma conversa: abertura natural no lugar da saudação
+  const dentro = mensagemConfirmacao({
+    nome: 'Victor Lopes',
+    data: '2026-11-18',
+    hora: '13:00',
+    servico: 'Escova',
+    preco: null,
+    profissional: 'Bruna',
+    abertura: 'Recebi seu comprovante, Victor! 💖 Seu horário está agendado.',
+  });
+  assertEquals(dentro.startsWith('Recebi seu comprovante, Victor!'), true);
+  assertEquals(dentro.includes('tudo bem?'), false);
 });
 
 const REAL = {

@@ -400,3 +400,13 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
   um agendamento real como `cancelado_no_sistema`); (3) se a IA não manda o id, o código
   acha o mesmo horário na agenda real, relida sem cache. O motivo de cada pedido que não
   executou sozinho agora vai para o log (`pedido_sem_automatico`).
+
+## Confirmação sem saudação repetida — 2026-11-17
+
+- A confirmação do agendamento e da remarcação começava com "Oi Victor, tudo bem?" no meio
+  da conversa. Agora a primeira linha é uma abertura natural ("Recebi seu comprovante,
+  Victor! 💖 Seu horário está agendado." / "Prontinho, seu horário foi remarcado! 💖") e o
+  resto segue o modelo da Bruna. A saudação do modelo só aparece se não houver abertura.
+- O registro do bot cancelado pela IA agora diz "cancelado pela IA a pedido da cliente".
+- Texto de política de cancelamento no Minha Agenda: "Cancelamentos em no máximo 24 horas
+  antes" (ambíguo; a IA repete como está). A trava de 24 h da IA assume "pelo menos 24 h".
