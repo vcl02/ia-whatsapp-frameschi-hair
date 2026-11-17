@@ -5,6 +5,7 @@
 import { assinaturaValida } from '../_shared/assinatura.ts';
 import {
   type ConfigWhatsApp,
+  enviarModelo,
   enviarTexto,
   filtrarPorListas,
   lerEventos,
@@ -32,9 +33,11 @@ import {
 import { type DepsBot, processarMensagem } from '../_shared/bot.ts';
 import {
   avisarEquipe,
+  avisarEquipeWhatsapp,
   enviarEmailResend,
   enviarResumo,
-  lerConfigAviso,
+  lerConfigsAviso,
+  lerNumerosAvisoWhatsapp,
 } from '../_shared/aviso.ts';
 import { criarAtendente } from '../_shared/atendente.ts';
 import {
@@ -135,11 +138,12 @@ async function tratarInterno(req: Request): Promise<Response> {
     )
     : null;
   const agendarLigado = !!chaveFirebase && Deno.env.get('SALAO_AGENDAR') !== 'nao';
-  const aviso = lerConfigAviso((n) => Deno.env.get(n));
+  const aviso = lerConfigsAviso((n) => Deno.env.get(n));
+  const numerosAviso = lerNumerosAvisoWhatsapp((n) => Deno.env.get(n));
   const avisarResumo = (assunto: string, texto: string) =>
     enviarResumo(
       aviso,
-      { enviarEmail: (cfg, e) => enviarEmailResend(cfg, e), log },
+      { enviarEmail: (cfg, e) => enviarEmailResend(cfg, e), log: logar },
       assunto,
       texto,
     );
@@ -177,13 +181,22 @@ async function tratarInterno(req: Request): Promise<Response> {
     atendente: criarAtendente((n) => Deno.env.get(n)),
     salao: SALAO,
     enviar: (para, texto) => enviarTexto(wa, para, texto),
-    avisar: (c, motivo) =>
-      avisarEquipe(
+    avisar: async (c, motivo) => {
+      // E-mail (uma conta por pessoa) e WhatsApp: um canal falhar não derruba o outro.
+      await avisarEquipe(
         aviso,
-        { enviarEmail: (cfg, e) => enviarEmailResend(cfg, e), log },
+        { enviarEmail: (cfg, e) => enviarEmailResend(cfg, e), log: logar },
         c,
         motivo,
-      ),
+      );
+      await avisarEquipeWhatsapp(
+        numerosAviso,
+        (para, modelo, idioma, params) => enviarModelo(wa, para, modelo, idioma, params),
+        logar,
+        c,
+        motivo,
+      );
+    },
     esperar: (ms) => new Promise((r) => setTimeout(r, ms)),
     ferramentas: consulta
       ? (ctx) =>

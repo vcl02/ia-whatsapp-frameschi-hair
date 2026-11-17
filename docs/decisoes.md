@@ -324,3 +324,19 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
   janela de 24 h. Agendamento com mais de um serviço ou com produto não é remarcado
   automaticamente.
 - A IA continua sem poder mexer na agenda: só quem aprova no painel dispara a ação.
+
+## Avisos à equipe: e-mail por conta e WhatsApp — 2026-11-17
+
+- O Resend só entrega ao dono da conta enquanto não houver domínio verificado (o envio
+  para outro destinatário deu 403). Por isso cada pessoa tem a sua conta: a principal
+  (`SALAO_AVISO_EMAIL_PARA`, `SALAO_AVISO_EMAIL_DE`, `SALAO_RESEND_API_KEY`) e a da Bruna
+  (os mesmos nomes com `_BRUNA`). Cada uma envia com a sua chave; falha de uma não impede
+  a outra. Os resumos de erro e da sincronização continuam só na conta principal.
+- Aviso "conversa precisa de você" também pelo WhatsApp, com o modelo `aviso_equipe`
+  (pt_BR, aprovado na Meta em 2026-11-17): `{{1}}` cliente (nome e número) e `{{2}}`
+  motivo, sem o texto da conversa. Números em `SALAO_AVISO_WHATSAPP_PARA` (secret, nunca
+  no repositório). Enviado pelo número do salão; o texto do modelo e o idioma ficam no
+  código, não em secrets.
+- Falha de e-mail (por exemplo 403) e de WhatsApp agora viram `erro_aviso_email` /
+  `erro_aviso_whatsapp` e aparecem no painel de erros. Os status de entrega desse aviso
+  não são gravados (o número da Bruna não está na lista de teste).

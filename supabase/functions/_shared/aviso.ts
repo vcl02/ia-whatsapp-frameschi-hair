@@ -1,9 +1,15 @@
-// Aviso à equipe por e-mail quando uma conversa precisa de alguém.
-// Provedor: Resend (API HTTP simples). Trocar de provedor = trocar só
+// Aviso à equipe quando uma conversa precisa de alguém: e-mail (Resend, uma conta por
+// pessoa: sem domínio verificado o Resend só entrega ao dono da conta) e modelo aprovado
+// no WhatsApp para o celular pessoal da Bruna. Trocar de provedor de e-mail = trocar só
 // `enviarEmailResend`. Sem configuração, o aviso é só registrado no log.
-// O e-mail leva nome do perfil, número e motivo; nunca o texto da conversa.
+// O aviso leva nome do perfil, número e motivo; nunca o texto da conversa.
 
 import type { Conversa } from './bot.ts';
+import { normalizarNumero, type ResultadoEnvio } from './whatsapp.ts';
+
+/** Modelo (template) aprovado na Meta para avisar a equipe. Corpo: {{1}} cliente, {{2}} motivo. */
+export const MODELO_AVISO_WHATSAPP = 'aviso_equipe';
+export const IDIOMA_AVISO_WHATSAPP = 'pt_BR';
 
 export interface ConfigAviso {
   para: string[]; // e-mails da equipe
@@ -39,6 +45,30 @@ export function lerConfigAviso(
   };
 }
 
+/**
+ * Todas as contas de e-mail que recebem os avisos: a principal (SALAO_AVISO_EMAIL_PARA,
+ * SALAO_AVISO_EMAIL_DE, SALAO_RESEND_API_KEY) e, se completa, a da Bruna (mesmos nomes
+ * com o sufixo _BRUNA, com a chave do Resend dela).
+ */
+export function lerConfigsAviso(
+  env: (n: string) => string | undefined,
+): ConfigAviso[] {
+  const bruna = lerConfigAviso((n) => env(`${n}_BRUNA`));
+  return bruna.apiKey && bruna.de && bruna.para.length > 0
+    ? [lerConfigAviso(env), bruna]
+    : [lerConfigAviso(env)];
+}
+
+/** Números que recebem o aviso pelo WhatsApp (SALAO_AVISO_WHATSAPP_PARA, separados por vírgula). */
+export function lerNumerosAvisoWhatsapp(
+  env: (n: string) => string | undefined,
+): string[] {
+  return (env('SALAO_AVISO_WHATSAPP_PARA') ?? '')
+    .split(',')
+    .map(normalizarNumero)
+    .filter((n) => n.length >= 12);
+}
+
 export function montarEmail(
   cfg: ConfigAviso,
   c: Conversa,
@@ -56,26 +86,82 @@ export function montarEmail(
 }
 
 export async function avisarEquipe(
-  cfg: ConfigAviso,
+  config: ConfigAviso | ConfigAviso[],
   deps: DepsAviso,
   c: Conversa,
   motivo: string,
 ): Promise<void> {
-  if (!cfg.apiKey || !cfg.de || cfg.para.length === 0) {
-    deps.log('aviso_equipe', {
-      conversa: c.id,
-      via: 'nenhum',
-      motivo: 'e-mail não configurado',
-    });
-    return;
+  for (const cfg of Array.isArray(config) ? config : [config]) {
+    if (!cfg.apiKey || !cfg.de || cfg.para.length === 0) {
+      deps.log('aviso_equipe', {
+        conversa: c.id,
+        via: 'nenhum',
+        motivo: 'e-mail não configurado',
+      });
+      continue;
+    }
+    try {
+      const r = await deps.enviarEmail(cfg, montarEmail(cfg, c, motivo));
+      deps.log('aviso_equipe', {
+        conversa: c.id,
+        via: 'email',
+        ok: r.ok,
+        http: r.status,
+      });
+      // Falha do provedor (ex.: 403 do Resend) também vai para o painel de erros.
+      if (!r.ok) deps.log('erro_aviso_email', { conversa: c.id, http: r.status });
+    } catch (e) {
+      deps.log('erro_aviso_email', { conversa: c.id, erro: String(e) });
+    }
   }
-  const r = await deps.enviarEmail(cfg, montarEmail(cfg, c, motivo));
-  deps.log('aviso_equipe', {
-    conversa: c.id,
-    via: 'email',
-    ok: r.ok,
-    http: r.status,
-  });
+}
+
+/** Variáveis de modelo do WhatsApp não aceitam quebra de linha nem espaços repetidos. */
+function paraVariavel(t: string, max: number): string {
+  return t.replace(/\s+/g, ' ').trim().slice(0, max) || '-';
+}
+
+/**
+ * Avisa a equipe pelo WhatsApp com o modelo aprovado ({{1}} cliente, {{2}} motivo).
+ * Um número que falha não impede os outros. Nada do texto da conversa vai no aviso.
+ */
+export async function avisarEquipeWhatsapp(
+  numeros: string[],
+  enviarModelo: (
+    para: string,
+    modelo: string,
+    idioma: string,
+    parametros: string[],
+  ) => Promise<ResultadoEnvio>,
+  log: (evento: string, dados?: Record<string, unknown>) => void,
+  c: Conversa,
+  motivo: string,
+): Promise<void> {
+  if (numeros.length === 0) return;
+  const cliente = paraVariavel(
+    c.nomePerfil ? `${c.nomePerfil} (+${c.waId})` : `+${c.waId}`,
+    120,
+  );
+  const mot = paraVariavel(motivo, 400);
+  for (const numero of numeros) {
+    try {
+      const r = await enviarModelo(numero, MODELO_AVISO_WHATSAPP, IDIOMA_AVISO_WHATSAPP, [
+        cliente,
+        mot,
+      ]);
+      log('aviso_equipe', {
+        conversa: c.id,
+        via: 'whatsapp',
+        ok: r.ok,
+        http: r.httpStatus,
+      });
+      if (!r.ok) {
+        log('erro_aviso_whatsapp', { conversa: c.id, http: r.httpStatus, erro: r.erro });
+      }
+    } catch (e) {
+      log('erro_aviso_whatsapp', { conversa: c.id, erro: String(e) });
+    }
+  }
 }
 
 export async function enviarEmailResend(
@@ -102,25 +188,32 @@ export async function enviarEmailResend(
 
 /** E-mail livre para a equipe (ex.: resumo da sincronização). Sem configuração, só registra no log. */
 export async function enviarResumo(
-  cfg: ConfigAviso,
+  config: ConfigAviso | ConfigAviso[],
   deps: DepsAviso,
   assunto: string,
   texto: string,
 ): Promise<void> {
-  if (!cfg.apiKey || !cfg.de || cfg.para.length === 0) {
-    deps.log('resumo_equipe', { via: 'nenhum', assunto });
-    return;
+  for (const cfg of Array.isArray(config) ? config : [config]) {
+    if (!cfg.apiKey || !cfg.de || cfg.para.length === 0) {
+      deps.log('resumo_equipe', { via: 'nenhum', assunto });
+      continue;
+    }
+    try {
+      const r = await deps.enviarEmail(cfg, {
+        de: cfg.de,
+        para: cfg.para,
+        assunto,
+        texto,
+      });
+      deps.log('resumo_equipe', {
+        via: 'email',
+        ok: r.ok,
+        http: r.status,
+        assunto,
+      });
+      if (!r.ok) deps.log('erro_aviso_email', { http: r.status, assunto });
+    } catch (e) {
+      deps.log('erro_aviso_email', { erro: String(e), assunto });
+    }
   }
-  const r = await deps.enviarEmail(cfg, {
-    de: cfg.de,
-    para: cfg.para,
-    assunto,
-    texto,
-  });
-  deps.log('resumo_equipe', {
-    via: 'email',
-    ok: r.ok,
-    http: r.status,
-    assunto,
-  });
 }
