@@ -861,7 +861,7 @@ export async function conferirAgendamentoNoSistema(
  */
 export async function contextoDaAgendaReal(
   painel: Pick<PainelMinhaAgenda, 'daCliente'>,
-  repo: Pick<RepositorioPropostas, 'agendadoAtivo' | 'mudarStatus'>,
+  repo: Pick<RepositorioPropostas, 'agendadoAtivo' | 'mudarStatus' | 'recente'>,
   conversaId: string,
   waId: string,
   agora: Date,
@@ -872,6 +872,7 @@ export async function contextoDaAgendaReal(
   const naAgenda = await painel.daCliente(waId, datas);
 
   // Agendamentos do bot que sumiram da agenda real (dentro da janela consultada).
+  const removidos: Proposta[] = [];
   for (let i = 0; i < 3; i++) {
     const ativo = await repo.agendadoAtivo(conversaId, hoje);
     if (
@@ -890,24 +891,45 @@ export async function contextoDaAgendaReal(
       'não está mais na agenda do painel do Minha Agenda',
     );
     log('agendamento_cancelado_no_sistema', { conversa: conversaId, proposta: ativo.id });
+    removidos.push(ativo);
   }
+  // Também o que já tinha sido marcado antes (para a IA continuar sabendo).
+  const recente = await repo.recente(conversaId);
+  if (
+    recente?.status === 'cancelado_no_sistema' && recente.data >= hoje &&
+    !removidos.some((r) => r.id === recente.id)
+  ) removidos.push(recente);
 
-  const ultimo = datas[datas.length - 1];
+  const partes = [
+    `AGENDA REAL DO SALÃO (consultada agora no sistema, de hoje até ${
+      dataCurta(datas[datas.length - 1])
+    }). Ela é a FONTE DA VERDADE: vale mais do que qualquer coisa dita antes na conversa, inclusive mensagens suas, propostas, comprovantes e confirmações. Se houver diferença, a equipe mudou no sistema: siga a agenda, sem desconfiar dela e sem chamar a Bruna só por causa da diferença.`,
+  ];
   if (naAgenda.length === 0) {
-    return `Agenda real do salão (consultada agora no sistema): esta cliente NÃO tem nenhum horário marcado de hoje até ${
-      dataCurta(ultimo)
-    }. Não diga que ela tem horário marcado. Se ela disser que tem, pode ser outra data ou outro telefone no cadastro: pergunte o dia e, se não bater, passe para a Bruna.`;
+    partes.push(
+      'Esta cliente NÃO tem nenhum horário marcado nesse período. Se ela perguntar, diga isso com clareza; não diga que ela tem horário.',
+    );
+  } else {
+    partes.push(
+      `Horários desta cliente na agenda:\n${
+        naAgenda.map((a) =>
+          `- ${a.servico}, ${
+            dataCurta(a.data)
+          }, às ${a.inicio}, com ${a.profissionalNome}${
+            a.preco ? `, ${reais(a.preco)}` : ''
+          }`
+        ).join('\n')
+      }\nSe ela pedir para CANCELAR ou REMARCAR um desses horários, siga o roteiro: confirme qual é, pergunte o motivo sem insistir e, para remarcar, o novo dia e horário (consulte com consultar_horarios); com tudo em mãos, chame registrar_pedido_para_bruna com horario_atual preenchido com o horário desta lista. Você não cancela nem remarca. Não chame registrar_pedido_para_bruna se ela não pediu para cancelar ou remarcar.`,
+    );
   }
-  const linhas = naAgenda.map((a) =>
-    `- ${a.servico}, ${dataCurta(a.data)}, às ${a.inicio}, com ${a.profissionalNome}${
-      a.preco ? `, ${reais(a.preco)}` : ''
-    }`
-  );
-  return `Agenda real do salão para esta cliente (consultada agora no sistema, de hoje até ${
-    dataCurta(ultimo)
-  }):\n${
-    linhas.join('\n')
-  }\nIsto é o que vale: se algo dito antes na conversa não bater com esta lista, a equipe mudou no sistema. Se ela pedir para CANCELAR ou REMARCAR um desses horários, siga o roteiro: confirme qual é, pergunte o motivo sem insistir e, para remarcar, o novo dia e horário (consulte com consultar_horarios); com tudo em mãos, chame registrar_pedido_para_bruna com horario_atual preenchido com o horário desta lista. Você não cancela nem remarca.`;
+  for (const r of removidos) {
+    partes.push(
+      `O agendamento ${
+        resumoDoAgendamento(r)
+      }, feito por aqui antes, NÃO está mais na agenda: a equipe cancelou ou alterou no sistema. Se ela perguntar dele, diga com carinho que ele não consta mais na agenda do salão. Só chame a Bruna se a cliente pedir uma pessoa, quiser saber o motivo, ou falar do sinal ou do Pix.`,
+    );
+  }
+  return partes.join('\n');
 }
 
 function contextoDaProposta(

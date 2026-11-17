@@ -161,6 +161,12 @@ function repoBot(ativo: Proposta | null) {
   return {
     mudancas,
     repo: {
+      recente: () =>
+        Promise.resolve(
+          mudancas.length && ativo
+            ? { ...ativo, status: 'cancelado_no_sistema', atualizadoEm: 0 }
+            : null,
+        ),
       agendadoAtivo: () => Promise.resolve(mudancas.length ? null : ativo),
       mudarStatus: (id: string, _de: string, para: string) => {
         mudancas.push(`${id}:${para}`);
@@ -199,9 +205,13 @@ Deno.test('agenda real: lista os horários da cliente e acerta o agendamento do 
     AGORA,
     () => {},
   );
+  assertStringIncludes(t, 'FONTE DA VERDADE');
   assertStringIncludes(t, 'Progressiva, quinta-feira, 19/11, às 13:00, com Bruna');
   assertStringIncludes(t, 'registrar_pedido_para_bruna');
   assertEquals(b.mudancas, ['p1:cancelado_no_sistema']);
+  // o agendamento do bot que sumiu aparece uma vez só, como não estando mais na agenda
+  assertEquals(t.split('NÃO está mais na agenda').length - 1, 1);
+  assertStringIncludes(t, 'Progressiva, quarta-feira, 18/11, às 13:00');
 });
 
 Deno.test('agenda real: sem horário marcado avisa a IA; agendamento do bot que continua não muda', async () => {
@@ -214,6 +224,7 @@ Deno.test('agenda real: sem horário marcado avisa a IA; agendamento do bot que 
     () => {},
   );
   assertStringIncludes(vazio, 'NÃO tem nenhum horário marcado');
+  assertStringIncludes(vazio, 'FONTE DA VERDADE');
 
   const b = repoBot({ ...PROPOSTA, data: '2026-11-19' });
   await contextoDaAgendaReal(
