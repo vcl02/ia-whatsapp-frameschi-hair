@@ -132,7 +132,7 @@ Deno.test('números do aviso por WhatsApp: normaliza e ignora lixo', () => {
   assertEquals(lerNumerosAvisoWhatsapp(() => undefined), []);
 });
 
-Deno.test('aviso por WhatsApp: modelo aviso_equipe com cliente e motivo, sem quebra de linha', async () => {
+Deno.test('aviso por WhatsApp: modelo aviso_atendimento_equipe com cliente e motivo, sem quebra de linha', async () => {
   const chamadas: Array<[string, string, string, string[]]> = [];
   const logs: string[] = [];
   const falha = { ok: false, wamid: null, httpStatus: 400, erro: 'x' };
@@ -149,7 +149,7 @@ Deno.test('aviso por WhatsApp: modelo aviso_equipe com cliente e motivo, sem que
   );
   assertEquals(chamadas.length, 2); // o primeiro falhar não impede o segundo
   assertEquals(chamadas[0].slice(1), [
-    'aviso_equipe',
+    'aviso_atendimento_equipe',
     'pt_BR',
     ['Ana (+5511999990000)', 'pediu a Bruna e mais coisa'],
   ]);

@@ -8,7 +8,7 @@ import type { Conversa } from './bot.ts';
 import { normalizarNumero, type ResultadoEnvio } from './whatsapp.ts';
 
 /** Modelo (template) aprovado na Meta para avisar a equipe. Corpo: {{1}} cliente, {{2}} motivo. */
-export const MODELO_AVISO_WHATSAPP = 'aviso_equipe';
+export const MODELO_AVISO_WHATSAPP = 'aviso_atendimento_equipe';
 export const IDIOMA_AVISO_WHATSAPP = 'pt_BR';
 
 export interface ConfigAviso {
