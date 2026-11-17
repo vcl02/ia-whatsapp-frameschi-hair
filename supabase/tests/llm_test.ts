@@ -1,5 +1,6 @@
 import { assertEquals, assertStringIncludes, assertThrows } from 'jsr:@std/assert@1.0.13';
 import {
+  corrigirQuebras,
   montarMensagens,
   montarSistema,
   validarDecisao,
@@ -467,4 +468,19 @@ Deno.test('aprendizado sem exemplo continua como antes', () => {
   const bloco = blocoAprendizados([{ escopo: 'geral', texto: 'Seja breve.' }], ['geral']);
   assertStringIncludes(bloco, '- Seja breve.');
   assertEquals(bloco.includes('  <exemplo>'), false);
+});
+
+Deno.test('quebra de linha escrita como texto ("\\n") vira quebra de verdade', () => {
+  assertEquals(corrigirQuebras('Oi!\\n\\nQual delas?'), 'Oi!\n\nQual delas?');
+  assertEquals(corrigirQuebras('a\\n\\n\\nb'), 'a\n\nb');
+  assertEquals(corrigirQuebras('sem quebra'), 'sem quebra');
+  assertEquals(
+    validarDecisao({
+      resposta: 'Oi\\n\\ntudo bem?',
+      passar_para_humano: false,
+      motivo: '',
+      intencao: 'duvida',
+    })?.resposta,
+    'Oi\n\ntudo bem?',
+  );
 });

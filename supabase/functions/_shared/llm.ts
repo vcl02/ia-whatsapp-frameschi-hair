@@ -309,6 +309,14 @@ export function montarMensagens(
   return msgs;
 }
 
+/**
+ * Às vezes o modelo escreve a quebra de linha como texto ("\\n" literal) dentro do JSON, e a
+ * cliente recebia "\\n\\n" no WhatsApp. Troca por quebra de verdade.
+ */
+export function corrigirQuebras(texto: string): string {
+  return texto.replace(/\\r\\n|\\n|\\r/g, '\n').replace(/\n{3,}/g, '\n\n');
+}
+
 export function validarDecisao(bruto: unknown): DecisaoLLM | null {
   if (!bruto || typeof bruto !== 'object') return null;
   const d = bruto as Record<string, unknown>;
@@ -324,7 +332,7 @@ export function validarDecisao(bruto: unknown): DecisaoLLM | null {
   }
   // Só os quatro campos: `uso` é do provedor, nunca do que o modelo escreveu.
   return {
-    resposta: d.resposta,
+    resposta: corrigirQuebras(d.resposta),
     passar_para_humano: d.passar_para_humano,
     motivo: d.motivo,
     intencao: d.intencao as Intencao,
