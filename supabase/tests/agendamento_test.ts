@@ -1,6 +1,7 @@
 import { assertEquals, assertStringIncludes } from 'jsr:@std/assert@1.0.13';
 import {
   AgendadorMinhaAgenda,
+  conferirAgendamentoNoSistema,
   contextoDoAgendamento,
   dataCurta,
   DEF_PEDIDO,
@@ -266,6 +267,7 @@ function cenario(
     ...comuns,
   };
   return {
+    consulta,
     propostas,
     pedidos,
     agendados,
@@ -712,4 +714,62 @@ Deno.test('garantirPedido: cria um pedido "indefinido" se a IA passou sem regist
     '2026-11-07',
   );
   assertStringIncludes(r, 'horário não identificado');
+});
+
+Deno.test('conferir no Minha Agenda: horário livre de novo marca como cancelado e avisa a IA', async () => {
+  const c = cenario({ livre: true });
+  await c.ferramentas().executar('propor_agendamento', PROPOSTA);
+  await c.comprovante();
+  const log: string[] = [];
+  const conferir = (agora: Date) =>
+    conferirAgendamentoNoSistema(
+      c.propostas,
+      c.consulta,
+      'c1',
+      agora,
+      (e) => log.push(e),
+    );
+  // logo depois de agendar não confere (a agenda pode não ter atualizado)
+  assertEquals(await conferir(new Date(AGORA.getTime() + 60_000)), null);
+  assertEquals(c.propostas.itens[0].status, 'agendado');
+  // horário ocupado: segue agendado
+  c.ocupar();
+  const depois = new Date(AGORA.getTime() + 60 * 60_000);
+  assertEquals(await conferir(depois), null);
+  assertEquals(c.propostas.itens[0].status, 'agendado');
+});
+
+Deno.test('conferir no Minha Agenda: horário livre (equipe cancelou lá) sai do ativo', async () => {
+  const c = cenario({ livre: true });
+  await c.ferramentas().executar('propor_agendamento', PROPOSTA);
+  await c.comprovante();
+  const depois = new Date(AGORA.getTime() + 60 * 60_000);
+  const t = await conferirAgendamentoNoSistema(
+    c.propostas,
+    c.consulta,
+    'c1',
+    depois,
+    () => {},
+  );
+  assertStringIncludes(t!, 'NÃO está mais na agenda do salão');
+  assertStringIncludes(t!, 'Banho de Lua');
+  assertEquals(c.propostas.itens[0].status, 'cancelado_no_sistema');
+  assertEquals(await c.propostas.agendadoAtivo('c1', '2026-11-07'), null);
+});
+
+Deno.test('conferir no Minha Agenda: falha na consulta não muda nada', async () => {
+  const c = cenario({ livre: true });
+  await c.ferramentas().executar('propor_agendamento', PROPOSTA);
+  await c.comprovante();
+  const log: string[] = [];
+  const t = await conferirAgendamentoNoSistema(
+    c.propostas,
+    { vagas: () => Promise.reject(new Error('HTTP 500')) },
+    'c1',
+    new Date(AGORA.getTime() + 60 * 60_000),
+    (e) => log.push(e),
+  );
+  assertEquals(t, null);
+  assertEquals(c.propostas.itens[0].status, 'agendado');
+  assertEquals(log, ['erro_conferir_agendamento']);
 });

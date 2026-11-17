@@ -1,5 +1,6 @@
 import { assertEquals, assertStringIncludes } from 'jsr:@std/assert@1.0.13';
 import {
+  comMensagemAtual,
   type Conversa,
   type DepsBot,
   LIMITE_GLOBAL_DIA,
@@ -46,8 +47,9 @@ class RepoFake implements Repositorio {
   conversa() {
     return Promise.resolve({ ...this.c });
   }
+  hist: ItemHistorico[] = [{ autor: 'cliente', texto: 'oi' }];
   historico(): Promise<ItemHistorico[]> {
-    return Promise.resolve([{ autor: 'cliente', texto: 'oi' }]);
+    return Promise.resolve(this.hist);
   }
   ultimaEntradaWamid() {
     return Promise.resolve(this.ultima);
@@ -99,8 +101,10 @@ function montar(decisao: DecisaoLLM | Error) {
   let chamadasLLM = 0;
   const salaoRecebido: { valor?: DadosSalao } = {};
   const aprendizadosRecebidos: { valor?: Aprendizado[] } = {};
+  const historicoRecebido: { valor?: ItemHistorico[] } = {};
   const atendente: Atendente = {
-    responder: (_h, _s, salao, opcoes) => {
+    responder: (h, _s, salao, opcoes) => {
+      historicoRecebido.valor = h;
       salaoRecebido.valor = salao;
       aprendizadosRecebidos.valor = opcoes?.aprendizados;
       chamadasLLM++;
@@ -134,6 +138,7 @@ function montar(decisao: DecisaoLLM | Error) {
     avisos,
     salaoRecebido,
     aprendizadosRecebidos,
+    historicoRecebido,
     llm: () => chamadasLLM,
   };
 }
@@ -596,4 +601,25 @@ Deno.test('aprendizados da equipe chegam à IA; se o banco falhar, responde sem 
   f.repo.aprendizadosFalha = true;
   assertEquals(await processarMensagem(f.deps, 'c1', msg()), 'respondido');
   assertEquals(f.aprendizadosRecebidos.valor, []);
+});
+
+Deno.test('IA retomada com a mensagem fora do contexto: responde a ela em vez de falhar', async () => {
+  const t = montar(ok);
+  t.repo.hist = []; // as mensagens chegaram com a IA pausada (número de teste)
+  const r = await processarMensagem(t.deps, 'c1', msg({ texto: 'Olá, boa noite' }));
+  assertEquals(r, 'respondido');
+  assertEquals(t.historicoRecebido.valor, [{
+    autor: 'cliente',
+    texto: 'Olá, boa noite',
+  }]);
+  assertEquals(t.repo.humano, null);
+});
+
+Deno.test('comMensagemAtual: só acrescenta quando a última do histórico não é da cliente', () => {
+  const h = [{ autor: 'cliente' as const, texto: 'oi' }];
+  assertEquals(comMensagemAtual(h, 'oi'), h);
+  assertEquals(
+    comMensagemAtual([...h, { autor: 'bot', texto: 'olá' }], 'tudo bem?').at(-1),
+    { autor: 'cliente', texto: 'tudo bem?' },
+  );
 });

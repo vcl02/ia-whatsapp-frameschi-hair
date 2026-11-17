@@ -20,6 +20,7 @@ import {
 import { ConsultaMinhaAgenda, hojeSaoPaulo } from '../_shared/disponibilidade.ts';
 import {
   AgendadorMinhaAgenda,
+  conferirAgendamentoNoSistema,
   contextoDoAgendamento,
   garantirPedido,
   montarFerramentas,
@@ -197,13 +198,25 @@ async function tratarInterno(req: Request): Promise<Response> {
         )
       : undefined,
     contextoAgendamento: propostas
-      ? (conversaId) =>
-        contextoDoAgendamento(
+      ? async (conversaId) => {
+        // Primeiro confere no Minha Agenda se a equipe cancelou ou remarcou por lá.
+        const noSistema = consulta
+          ? await conferirAgendamentoNoSistema(
+            propostas,
+            consulta,
+            conversaId,
+            new Date(),
+            logar,
+          )
+          : null;
+        const contexto = await contextoDoAgendamento(
           propostas,
           conversaId,
           new Date(),
           (ms) => new Promise((r) => setTimeout(r, ms)),
-        )
+        );
+        return [noSistema, contexto].filter(Boolean).join('\n') || null;
+      }
       : undefined,
     registrarPedidoCancelamento: (conversaId, motivo) =>
       garantirPedido(

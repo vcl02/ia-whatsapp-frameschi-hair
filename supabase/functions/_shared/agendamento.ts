@@ -800,6 +800,54 @@ export async function contextoDoAgendamento(
   return partes.length ? partes.join('\n') : null;
 }
 
+/** Quanto esperar depois da proposta antes de conferir o agendamento no Minha Agenda. */
+const CONFERIR_DEPOIS_MS = 10 * 60_000;
+
+/**
+ * Confere no Minha Agenda se o agendamento ativo da conversa ainda ocupa o horário. Se o
+ * horário voltou a aparecer livre com a mesma profissional, a equipe cancelou ou remarcou
+ * lá: marca como "cancelado_no_sistema" e devolve um aviso para a IA. Só lê a agenda.
+ * Horário ocupado não prova que ainda é dela (outra pessoa pode ter pego), mas livre prova
+ * que não é mais. Falha na consulta: não muda nada.
+ */
+export async function conferirAgendamentoNoSistema(
+  repo: Pick<RepositorioPropostas, 'agendadoAtivo' | 'mudarStatus'>,
+  consulta: Pick<ConsultaMinhaAgenda, 'vagas'>,
+  conversaId: string,
+  agora: Date,
+  log: (evento: string, dados?: Record<string, unknown>) => void,
+): Promise<string | null> {
+  const avisos: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    const ativo = await repo.agendadoAtivo(conversaId, hojeSaoPaulo(agora));
+    if (!ativo || agora.getTime() - ativo.criadoEm < CONFERIR_DEPOIS_MS) break;
+    let livre: boolean;
+    try {
+      const r = await consulta.vagas(ativo.servicoId, ativo.data, true);
+      livre = !!r.profissionais
+        .find((p) => p.id === ativo.profissionalId)
+        ?.horarios.includes(ativo.hora);
+    } catch (e) {
+      log('erro_conferir_agendamento', { conversa: conversaId, erro: String(e) });
+      break;
+    }
+    if (!livre) break;
+    await repo.mudarStatus(
+      ativo.id,
+      'agendado',
+      'cancelado_no_sistema',
+      'horário livre de novo no Minha Agenda',
+    );
+    log('agendamento_cancelado_no_sistema', { conversa: conversaId, proposta: ativo.id });
+    avisos.push(
+      `O agendamento ${
+        resumoDoAgendamento(ativo)
+      } NÃO está mais na agenda do salão (o horário aparece livre de novo): a equipe cancelou ou remarcou no sistema. Não diga que ela tem esse horário marcado. Se ela perguntar, diga que ele não aparece mais na agenda e, se ela não souber por quê, passe para a Bruna.`,
+    );
+  }
+  return avisos.length ? avisos.join('\n') : null;
+}
+
 function contextoDaProposta(
   r: PropostaRecente | null,
   agora: Date,

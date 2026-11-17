@@ -274,3 +274,24 @@ Registro curto. Data = quando foi decidido ou registrado aqui.
 - As regras antigas (24 h de antecedência, uma remarcação por agendamento) deixaram de ser
   aplicadas pelo código: a Bruna decide. O pedido sai com alerta quando faltam menos de 24
   h.
+
+## Migração para a conta da Bruna, cancelamento pelo Minha Agenda e histórico de pausas — 2026-11-17
+
+- O app antigo (portfólio do Victor) foi restrito pela Meta. O bot passou para um app novo
+  no portfólio "Bruna Hair", da Bruna, com o número do salão (+55 11 98897-3181) em
+  coexistência. O app e o portfólio antigos ficam parados, sem excluir, enquanto houver
+  caso aberto na Meta.
+- Conversas, mensagens, status e agendamentos de teste foram apagados do banco em
+  2026-11-16; a lista de teste ficou só com o número do Victor.
+- Agendamento cancelado ou remarcado pela equipe direto no Minha Agenda: antes de
+  responder, o bot confere se o horário do agendamento ativo voltou a aparecer livre com a
+  mesma profissional (`conferirAgendamentoNoSistema`, só leitura, a partir de 10 min
+  depois da proposta). Livre = não é mais da cliente: status `cancelado_no_sistema` e a IA
+  é avisada. Ocupado não prova que ainda é dela (outra pessoa pode ter pego o horário), mas
+  é o melhor sinal sem acesso à agenda interna. Remarcação feita lá não é descoberta: só
+  que o horário antigo saiu.
+- Quem pausou/retomou a IA fica em `salao_pausas` (trigger em `salao_conversas`): e-mail
+  de quem mexeu no painel ou "sistema".
+- Mensagem que chegou com a IA pausada num número de teste fica fora do contexto; se a IA
+  for retomada antes de ela ser respondida, o bot responde a ela mesmo assim
+  (`comMensagemAtual`), em vez de falhar com "histórico sem mensagem da cliente".

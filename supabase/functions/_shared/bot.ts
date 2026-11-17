@@ -213,6 +213,21 @@ async function passarParaHumano(
   return 'passado_para_humano';
 }
 
+/**
+ * A mensagem que está sendo respondida tem que ser a última do histórico. Ela fica fora
+ * dele quando chegou com a IA pausada num número de teste (fora_contexto) e a IA foi
+ * retomada logo em seguida: sem isto, a IA não teria o que responder.
+ */
+export function comMensagemAtual(
+  historico: ItemHistorico[],
+  texto: string,
+): ItemHistorico[] {
+  const ultima = historico[historico.length - 1];
+  return ultima?.autor === 'cliente'
+    ? historico
+    : [...historico, { autor: 'cliente', texto }];
+}
+
 export async function processarMensagem(
   deps: DepsBot,
   conversaId: string,
@@ -316,7 +331,10 @@ export async function processarMensagem(
 
   let decisao;
   try {
-    const historico = await deps.repo.historico(c.id, LIMITE_HISTORICO);
+    const historico = comMensagemAtual(
+      await deps.repo.historico(c.id, LIMITE_HISTORICO),
+      msg.texto,
+    );
     const contextoAgendamento = await deps
       .contextoAgendamento?.(c.id)
       .catch(() => null);
