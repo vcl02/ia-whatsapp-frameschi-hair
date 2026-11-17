@@ -926,7 +926,7 @@ export async function contextoDaAgendaReal(
     partes.push(
       `O agendamento ${
         resumoDoAgendamento(r)
-      }, feito por aqui antes, NÃO está mais na agenda: a equipe cancelou ou alterou no sistema. Se ela perguntar dele, diga com carinho que ele não consta mais na agenda do salão. Só chame a Bruna se a cliente pedir uma pessoa, quiser saber o motivo, ou falar do sinal ou do Pix.`,
+      }, feito por aqui antes, NÃO está mais na agenda: a equipe cancelou ou alterou no sistema, então a Bruna já sabe. Se ela perguntar dele, diga com carinho que ele não consta mais na agenda do salão e ofereça ver outro horário. NÃO chame a Bruna por causa disso, nem por causa de Pix, sinal ou comprovante mandados antes na conversa. Só chame se, na mensagem atual, a cliente pedir uma pessoa, perguntar o motivo do cancelamento ou falar em devolver o sinal.`,
     );
   }
   return partes.join('\n');

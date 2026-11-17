@@ -212,6 +212,7 @@ Deno.test('agenda real: lista os horários da cliente e acerta o agendamento do 
   // o agendamento do bot que sumiu aparece uma vez só, como não estando mais na agenda
   assertEquals(t.split('NÃO está mais na agenda').length - 1, 1);
   assertStringIncludes(t, 'Progressiva, quarta-feira, 18/11, às 13:00');
+  assertStringIncludes(t, 'NÃO chame a Bruna por causa disso');
 });
 
 Deno.test('agenda real: sem horário marcado avisa a IA; agendamento do bot que continua não muda', async () => {
