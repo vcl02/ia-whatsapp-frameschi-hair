@@ -46,8 +46,8 @@ jobs:
         run: |
           if [ "${{ inputs.funcao }}" = "todas" ]; then
             for f in salao-webhook salao-lembrete salao-sincronizar salao-responder; do
-              supabase functions deploy "$f" --project-ref "$PROJETO"
+              supabase functions deploy "$f" --project-ref "$PROJETO" --yes
             done
           else
-            supabase functions deploy "${{ inputs.funcao }}" --project-ref "$PROJETO"
+            supabase functions deploy "${{ inputs.funcao }}" --project-ref "$PROJETO" --yes
           fi
